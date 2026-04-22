@@ -460,7 +460,6 @@ export default function BannerEditorPreviewV2Fix() {
     return logoNaturalSize.height * scaleRatio;
   };
 
-  const renderedLogoHeight = getRenderedLogoHeight();
 
   useEffect(() => {
     if (!previewCaptureRef.current || !logoImgRef.current || !logoLoaded || templateKey !== "B") return;

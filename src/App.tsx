@@ -311,7 +311,6 @@ export default function BannerEditorPreviewV2Fix() {
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("배경 이미지를 업로드하면 바로 작업 가능");
   const [letterSpacing, setLetterSpacing] = useState(TEXT_STYLE.letterSpacingEm);
-  const [bExclusiveOffsetY, setBExclusiveOffsetY] = useState(0);
   const [aiPromptMap, setAiPromptMap] = useState({ A: "", B: "", C: "" });
   const [aiLoadingMap, setAiLoadingMap] = useState({ A: false, B: false, C: false });
   const [aiPreviewTick, setAiPreviewTick] = useState(0);
@@ -452,13 +451,6 @@ export default function BannerEditorPreviewV2Fix() {
     };
   }, [dragging]);
 
-  const renderText = text
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("\n");
 
   const getRenderedLogoHeight = () => {
     if (!logoNaturalSize.width || !logoNaturalSize.height) return template.logoBox.h;
@@ -469,8 +461,6 @@ export default function BannerEditorPreviewV2Fix() {
   };
 
   const renderedLogoHeight = getRenderedLogoHeight();
-  const hasLogoSize = !!logoNaturalSize.height;
-  const renderedLogoTop = template.logoBox.y + template.logoBox.h - renderedLogoHeight;
 
   useEffect(() => {
     if (!previewCaptureRef.current || !logoImgRef.current || !logoLoaded || templateKey !== "B") return;

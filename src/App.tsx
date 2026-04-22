@@ -311,6 +311,7 @@ export default function BannerEditorPreviewV2Fix() {
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("배경 이미지를 업로드하면 바로 작업 가능");
   const [letterSpacing, setLetterSpacing] = useState(TEXT_STYLE.letterSpacingEm);
+  const [bExclusiveOffsetY, setBExclusiveOffsetY] = useState(0);
   const [aiPromptMap, setAiPromptMap] = useState({ A: "", B: "", C: "" });
   const [aiLoadingMap, setAiLoadingMap] = useState({ A: false, B: false, C: false });
   const [aiPreviewTick, setAiPreviewTick] = useState(0);
@@ -451,6 +452,13 @@ export default function BannerEditorPreviewV2Fix() {
     };
   }, [dragging]);
 
+  const renderText = text
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("\n");
 
   const getRenderedLogoHeight = () => {
     if (!logoNaturalSize.width || !logoNaturalSize.height) return template.logoBox.h;
@@ -460,6 +468,9 @@ export default function BannerEditorPreviewV2Fix() {
     return logoNaturalSize.height * scaleRatio;
   };
 
+  const renderedLogoHeight = getRenderedLogoHeight();
+  const hasLogoSize = !!logoNaturalSize.height;
+  const renderedLogoTop = template.logoBox.y + template.logoBox.h - renderedLogoHeight;
 
   useEffect(() => {
     if (!previewCaptureRef.current || !logoImgRef.current || !logoLoaded || templateKey !== "B") return;
@@ -473,7 +484,7 @@ export default function BannerEditorPreviewV2Fix() {
     });
   }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w]);
 
-  const horizontalExclusiveTop = logoLoaded ? (logoMetrics.top - 35 - 16) : 0;
+  const horizontalExclusiveTop = logoLoaded && logoMetrics.height > 0 ? logoMetrics.top - 35 - 16 : null;
   const currentAiPrompt = aiPromptMap[templateKey] ?? "";
   const currentAiLoading = aiLoadingMap[templateKey] ?? false;
 
@@ -597,7 +608,7 @@ export default function BannerEditorPreviewV2Fix() {
               <input
                 type="range"
                 min={0.8}
-                max={templateKey === "B" ? 3.0 : 2.2}
+                max={2.2}
                 step={0.01}
                 value={currentBgScale}
                 onChange={(e) => setBgScaleMap((prev) => ({ ...prev, [templateKey]: Number(e.target.value) }))}
@@ -827,9 +838,13 @@ export default function BannerEditorPreviewV2Fix() {
                         alt="로고"
                         onLoad={(e) => {
                           const img = e.currentTarget;
+                          setLogoLoaded(false);
+                          setLogoMetrics({ top: 0, height: 0 });
                           setLogoNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
                           requestAnimationFrame(() => {
-                            setLogoLoaded(true);
+                            requestAnimationFrame(() => {
+                              setLogoLoaded(true);
+                            });
                           });
                         }}
                         style={{
@@ -891,8 +906,9 @@ export default function BannerEditorPreviewV2Fix() {
                     />
                   )}
 
-                  {showExclusiveLabel && templateKey === "B" && logoImage && logoLoaded && (
+                  {showExclusiveLabel && templateKey === "B" && logoImage && logoLoaded && horizontalExclusiveTop !== null && (
                     <img
+                      key={`${templateKey}-${logoImage.length}-${logoMetrics.height}-${currentLogoScale}`}
                       src={HORIZONTAL_EXCLUSIVE_LABEL_SRC}
                       alt=""
                       style={{

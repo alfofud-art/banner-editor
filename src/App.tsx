@@ -270,7 +270,7 @@ export default function BannerEditorPreviewV2Fix() {
   const previewWideHostRef = useRef<HTMLDivElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
   const [showGuide, setShowGuide] = useState({ logo: true, text: true });
-  const [showExclusiveLabel, setShowExclusiveLabel] = useState(true);
+  const [showExclusiveLabelMap, setShowExclusiveLabelMap] = useState({ A: true, B: false, C: true });
   const [showCircleLabel, setShowCircleLabel] = useState(true);
   const [templateKey, setTemplateKey] = useState<keyof typeof TEMPLATE_MAP>("A");
   const [text, setText] = useState(defaultText);
@@ -465,23 +465,25 @@ export default function BannerEditorPreviewV2Fix() {
   }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w]);
 
   const horizontalLogoRenderedHeight =
-  templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
-    ? (() => {
-        const widthRatio = template.logoBox.w / logoNaturalSize.width;
-        const heightRatio = template.logoBox.h / logoNaturalSize.height;
-        const fitScale = Math.min(widthRatio, heightRatio);
-        return logoNaturalSize.height * fitScale * currentLogoScale;
-      })()
-    : 0;
+    templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
+      ? (() => {
+          const widthRatio = template.logoBox.w / logoNaturalSize.width;
+          const heightRatio = template.logoBox.h / logoNaturalSize.height;
+          const fitScale = Math.min(widthRatio, heightRatio);
+          return logoNaturalSize.height * fitScale * currentLogoScale;
+        })()
+      : 0;
 
   const horizontalExclusiveTop =
     templateKey === "B" && horizontalLogoRenderedHeight > 0
-      ? template.logoBox.y + template.logoBox.h - horizontalLogoRenderedHeight - 35 - 16
+      ? template.logoBox.y + template.logoBox.h - horizontalLogoRenderedHeight - 16 - 35
       : 0;
+
+  const currentShowExclusiveLabel = showExclusiveLabelMap[templateKey] ?? false;
   const currentAiPrompt = aiPromptMap[templateKey] ?? "";
   const currentAiLoading = aiLoadingMap[templateKey] ?? false;
 
-  const handleAiEditClick = () => {
+  const handleAiEditClick = async () => {
   if (!bgImage) {
     setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
     return;
@@ -492,17 +494,41 @@ export default function BannerEditorPreviewV2Fix() {
     return;
   }
 
-  setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
-  setStatusMessage("AI 이미지 처리중...");
+  try {
+    setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
+    setStatusMessage("AI 이미지 처리중...");
 
-  setTimeout(() => {
-    // 👉 data:image/png;base64 뒤에 ?v 를 붙이면 이미지가 깨지므로,
-    // 👉 미리보기 단계에서는 별도 tick 값만 올려서 안전하게 리렌더 처리
+    const blob = await fetch(bgImage).then((r) => r.blob());
+    const formData = new FormData();
+    formData.append("image", blob, "background.png");
+    formData.append("prompt", currentAiPrompt.trim());
+
+    const response = await fetch("http://localhost:3001/api/edit-image", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || "AI 편집 요청 실패");
+    }
+
+    if (!data?.image) {
+      throw new Error("편집된 이미지 데이터를 받지 못했어");
+    }
+
+    setBgImage(`data:image/png;base64,${data.image}`);
     setAiPreviewTick((prev) => prev + 1);
-
+    setStatusMessage("AI 편집 완료");
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "AI 편집 중 오류가 발생했어";
+    setStatusMessage(message);
+    alert(message);
+  } finally {
     setAiLoadingMap((prev) => ({ ...prev, [templateKey]: false }));
-    setStatusMessage("AI 편집 완료 (미리보기 단계)");
-  }, 1200);
+  }
 };
 
   return (
@@ -852,7 +878,7 @@ export default function BannerEditorPreviewV2Fix() {
                   </div>
                 )}
 
-                  {showExclusiveLabel && templateKey !== "B" && (
+                  {currentShowExclusiveLabel && templateKey !== "B" && (
                     <img
                       src={EXCLUSIVE_LABEL_SRC}
                       alt=""
@@ -869,7 +895,7 @@ export default function BannerEditorPreviewV2Fix() {
                     />
                   )}
 
-                  {showExclusiveLabel && templateKey === "B" && logoImage && horizontalLogoRenderedHeight > 0 && (
+                  {currentShowExclusiveLabel && templateKey === "B" && logoImage && horizontalLogoRenderedHeight > 0 && (
                     <img
                       src={HORIZONTAL_EXCLUSIVE_LABEL_SRC}
                       alt=""
@@ -947,19 +973,24 @@ export default function BannerEditorPreviewV2Fix() {
                   fontWeight: 800,
                 }}
               >
-                {currentAiLoading ? "준비 중" : "AI 실행"}
+                {currentAiLoading ? "AI 편집 중..." : "AI 실행"}
               </button>
             </div>
               <div style={styles.helper}>
-                지금은 2단계까지 연결된 상태야. 유형별 입력값은 각각 따로 저장되고, 버튼 클릭 시 이미지+자연어 요청 흐름을 점검해.
+                유형별 입력값은 각각 따로 저장돼. AI 실행 버튼을 누르면 로컬 API 서버(3001)로 이미지와 요청 문구를 보내.
               </div>
             </div>
 
             <div style={styles.toggleGrid}>
               <button
                 type="button"
-                style={showExclusiveLabel ? styles.bigButtonActive : styles.bigButton}
-                onClick={() => setShowExclusiveLabel((prev) => !prev)}
+                style={currentShowExclusiveLabel ? styles.bigButtonActive : styles.bigButton}
+                onClick={() =>
+                  setShowExclusiveLabelMap((prev) => ({
+                    ...prev,
+                    [templateKey]: !prev[templateKey],
+                  }))
+                }
               >
                 독점라벨 ON/OFF
               </button>

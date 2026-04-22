@@ -247,26 +247,6 @@ function readFileAsDataURL(file: File): Promise<string> {
   });
 }
 
-
-
-function dataURLToBlob(dataURL: string): Blob {
-  const parts = dataURL.split(",");
-  const header = parts[0];
-  const base64 = parts[1];
-  const mimeMatch = header.match(/data:(.*?);base64/);
-  const mime = mimeMatch ? mimeMatch[1] : "image/png";
-
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return new Blob([bytes], { type: mime });
-}
-
 function DataUriIcon({ children }: { children: React.ReactNode }) {
   return (
     <span
@@ -484,11 +464,24 @@ export default function BannerEditorPreviewV2Fix() {
     });
   }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w]);
 
-  const horizontalExclusiveTop = logoLoaded && logoMetrics.height > 0 ? logoMetrics.top - 35 - 16 : null;
+  const horizontalLogoRenderedHeight =
+  templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
+    ? (() => {
+        const widthRatio = template.logoBox.w / logoNaturalSize.width;
+        const heightRatio = template.logoBox.h / logoNaturalSize.height;
+        const fitScale = Math.min(widthRatio, heightRatio);
+        return logoNaturalSize.height * fitScale * currentLogoScale;
+      })()
+    : 0;
+
+  const horizontalExclusiveTop =
+    templateKey === "B" && horizontalLogoRenderedHeight > 0
+      ? template.logoBox.y + template.logoBox.h - horizontalLogoRenderedHeight - 35 - 16
+      : 0;
   const currentAiPrompt = aiPromptMap[templateKey] ?? "";
   const currentAiLoading = aiLoadingMap[templateKey] ?? false;
 
-  const handleAiEditClick = async () => {
+  const handleAiEditClick = () => {
   if (!bgImage) {
     setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
     return;
@@ -499,43 +492,17 @@ export default function BannerEditorPreviewV2Fix() {
     return;
   }
 
-  try {
-    setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
-    setStatusMessage("AI 이미지 처리중...");
+  setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
+  setStatusMessage("AI 이미지 처리중...");
 
-    const blob = bgImage.startsWith("data:")
-      ? dataURLToBlob(bgImage)
-      : await fetch(bgImage).then((r) => r.blob());
-    const formData = new FormData();
-    formData.append("image", blob, "background.png");
-    formData.append("prompt", currentAiPrompt.trim());
-
-    const response = await fetch("http://localhost:3001/api/edit-image", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data?.error || "AI 편집 요청 실패");
-    }
-
-    if (!data?.image) {
-      throw new Error("편집된 이미지 데이터를 받지 못했어");
-    }
-
-    setBgImage(`data:image/png;base64,${data.image}`);
+  setTimeout(() => {
+    // 👉 data:image/png;base64 뒤에 ?v 를 붙이면 이미지가 깨지므로,
+    // 👉 미리보기 단계에서는 별도 tick 값만 올려서 안전하게 리렌더 처리
     setAiPreviewTick((prev) => prev + 1);
-    setStatusMessage("AI 편집 완료");
-  } catch (error) {
-    console.error(error);
-    const message = error instanceof Error ? error.message : "AI 편집 중 오류가 발생했어";
-    setStatusMessage(message);
-    alert(message);
-  } finally {
+
     setAiLoadingMap((prev) => ({ ...prev, [templateKey]: false }));
-  }
+    setStatusMessage("AI 편집 완료 (미리보기 단계)");
+  }, 1200);
 };
 
   return (
@@ -838,13 +805,9 @@ export default function BannerEditorPreviewV2Fix() {
                         alt="로고"
                         onLoad={(e) => {
                           const img = e.currentTarget;
-                          setLogoLoaded(false);
-                          setLogoMetrics({ top: 0, height: 0 });
                           setLogoNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
                           requestAnimationFrame(() => {
-                            requestAnimationFrame(() => {
-                              setLogoLoaded(true);
-                            });
+                            setLogoLoaded(true);
                           });
                         }}
                         style={{
@@ -906,9 +869,8 @@ export default function BannerEditorPreviewV2Fix() {
                     />
                   )}
 
-                  {showExclusiveLabel && templateKey === "B" && logoImage && logoLoaded && horizontalExclusiveTop !== null && (
+                  {showExclusiveLabel && templateKey === "B" && logoImage && horizontalLogoRenderedHeight > 0 && (
                     <img
-                      key={`${templateKey}-${logoImage.length}-${logoMetrics.height}-${currentLogoScale}`}
                       src={HORIZONTAL_EXCLUSIVE_LABEL_SRC}
                       alt=""
                       style={{
@@ -985,11 +947,11 @@ export default function BannerEditorPreviewV2Fix() {
                   fontWeight: 800,
                 }}
               >
-                {currentAiLoading ? "AI 편집 중..." : "AI 실행"}
+                {currentAiLoading ? "준비 중" : "AI 실행"}
               </button>
             </div>
               <div style={styles.helper}>
-                유형별 입력값은 각각 따로 저장돼. AI 실행 버튼을 누르면 로컬 API 서버(3001)로 이미지와 요청 문구를 보내.
+                지금은 2단계까지 연결된 상태야. 유형별 입력값은 각각 따로 저장되고, 버튼 클릭 시 이미지+자연어 요청 흐름을 점검해.
               </div>
             </div>
 

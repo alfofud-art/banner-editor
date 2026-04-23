@@ -480,15 +480,15 @@ export default function BannerEditorPreviewV2Fix() {
 }, [logoLoaded, logoImage, currentLogoScale, templateKey]);
 
   const horizontalLogoRenderedHeight =
-    templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
-      ? (() => {
-          const widthRatio = template.logoBox.w / logoNaturalSize.width;
-          const heightRatio = template.logoBox.h / logoNaturalSize.height;
-          const fitScale = Math.min(widthRatio, heightRatio);
-          const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
-          return Math.min(template.logoBox.h, scaledHeight);
-        })()
-      : 0;
+  templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
+    ? (() => {
+        const widthRatio = template.logoBox.w / logoNaturalSize.width;
+        const heightRatio = template.logoBox.h / logoNaturalSize.height;
+        const fitScale = Math.min(widthRatio, heightRatio);
+        const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
+        return scaledHeight; // 🔥 핵심 (잘라내기 제거)
+      })()
+    : 0;
 
   const horizontalExclusiveTop =
     templateKey === "B" && horizontalLogoRenderedHeight > 0

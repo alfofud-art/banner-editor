@@ -471,7 +471,7 @@ export default function BannerEditorPreviewV2Fix() {
           const heightRatio = template.logoBox.h / logoNaturalSize.height;
           const fitScale = Math.min(widthRatio, heightRatio);
           const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
-          return scaledHeight;
+          return Math.min(template.logoBox.h, scaledHeight);
         })()
       : 0;
 

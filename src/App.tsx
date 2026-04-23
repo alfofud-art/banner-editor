@@ -464,16 +464,16 @@ export default function BannerEditorPreviewV2Fix() {
     });
   }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w]);
 
-  const horizontalLogoRenderedHeight =
-    templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
-      ? (() => {
-          const widthRatio = template.logoBox.w / logoNaturalSize.width;
-          const heightRatio = template.logoBox.h / logoNaturalSize.height;
-          const fitScale = Math.min(widthRatio, heightRatio);
-          const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
-          return Math.min(template.logoBox.h, scaledHeight);
-        })()
-      : 0;
+const horizontalLogoRenderedHeight =
+  templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
+    ? (() => {
+        const widthRatio = template.logoBox.w / logoNaturalSize.width;
+        const heightRatio = template.logoBox.h / logoNaturalSize.height;
+        const fitScale = Math.min(widthRatio, heightRatio);
+        const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
+        return scaledHeight;
+      })()
+    : 0;
 
   const horizontalExclusiveTop =
     templateKey === "B" && horizontalLogoRenderedHeight > 0

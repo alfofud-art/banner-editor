@@ -72,7 +72,8 @@ const styles = {
     background: "#f1f5f9",
     padding: 24,
     color: "#0f172a",
-    fontFamily: 'Arial, "Noto Sans KR", sans-serif',
+    fontFamily: '"Noto Sans KR", "Noto Sans CJK KR", Arial, sans-serif',
+    textAlign: "left",
   } as React.CSSProperties,
   layout: {
     maxWidth: 1280,
@@ -193,16 +194,22 @@ const styles = {
     background: "#f8fafc",
     padding: 32,
   } as React.CSSProperties,
-  previewWrapWide: {
-    borderRadius: 32,
-    background: "#f8fafc",
-    padding: 16,
-    overflowX: "auto",
-  } as React.CSSProperties,
-  previewCenter: {
-    display: "flex",
-    justifyContent: "center",
-  } as React.CSSProperties,
+previewWrapWide: {
+  borderRadius: 32,
+  background: "#f8fafc",
+  padding: 16,
+  overflow: "hidden",
+  display: "flex",
+  justifyContent: "center",
+} as React.CSSProperties,
+
+previewCenter: {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "flex-start",
+  textAlign: "left",
+  width: "auto",
+} as React.CSSProperties,
   toggleGrid: {
     marginTop: 24,
     display: "grid",
@@ -240,6 +247,26 @@ function readFileAsDataURL(file: File): Promise<string> {
   });
 }
 
+
+
+function dataURLToBlob(dataURL: string): Blob {
+  const parts = dataURL.split(",");
+  const header = parts[0];
+  const base64 = parts[1];
+  const mimeMatch = header.match(/data:(.*?);base64/);
+  const mime = mimeMatch ? mimeMatch[1] : "image/png";
+
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return new Blob([bytes], { type: mime });
+}
+
 function DataUriIcon({ children }: { children: React.ReactNode }) {
   return (
     <span
@@ -260,6 +287,7 @@ function DataUriIcon({ children }: { children: React.ReactNode }) {
 
 export default function BannerEditorPreviewV2Fix() {
   const previewCaptureRef = useRef<HTMLDivElement | null>(null);
+  const previewWideHostRef = useRef<HTMLDivElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
   const [showGuide, setShowGuide] = useState({ logo: true, text: true });
   const [showExclusiveLabel, setShowExclusiveLabel] = useState(true);
@@ -287,11 +315,33 @@ export default function BannerEditorPreviewV2Fix() {
   const [aiPromptMap, setAiPromptMap] = useState({ A: "", B: "", C: "" });
   const [aiLoadingMap, setAiLoadingMap] = useState({ A: false, B: false, C: false });
   const [aiPreviewTick, setAiPreviewTick] = useState(0);
+  const [previewWideScale, setPreviewWideScale] = useState(1);
   const dragRef = useRef({ x: 0, y: 0, startPosX: 0, startPosY: 0 });
 
   const template = TEMPLATE_MAP[templateKey];
   const previewWidth = template.canvas.width;
   const previewHeight = template.canvas.height;
+  const displayPreviewWidth = templateKey === "B" ? Math.round(previewWidth * previewWideScale) : previewWidth;
+  const displayPreviewHeight = templateKey === "B" ? Math.round(previewHeight * previewWideScale) : previewHeight;
+
+  useEffect(() => {
+    if (templateKey !== "B") {
+      setPreviewWideScale(1);
+      return;
+    }
+
+    const updateScale = () => {
+      const host = previewWideHostRef.current;
+      if (!host) return;
+      const availableWidth = Math.max(0, host.clientWidth - 32);
+      const nextScale = availableWidth > 0 ? Math.min(1, availableWidth / TEMPLATE_MAP.B.canvas.width) : 1;
+      setPreviewWideScale(Number(nextScale.toFixed(4)));
+    };
+
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, [templateKey]);
 
   const backgroundStyle = useMemo(
     () => ({
@@ -403,6 +453,7 @@ export default function BannerEditorPreviewV2Fix() {
   }, [dragging]);
 
   const renderText = text
+    .replace(/\r\n/g, "\n")
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
@@ -431,16 +482,13 @@ export default function BannerEditorPreviewV2Fix() {
       top: (logoRect.top - previewRect.top) / previewWideScale,
       height: logoRect.height / previewWideScale,
     });
-  }, [logoLoaded, logoImage, currentLogoScale, templateKey, previewWideScale, template.logoBox.h, template.logoBox.w]);
+  }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w, previewWideScale]);
 
-  const horizontalExclusiveTop =
-    templateKey === "B" && logoLoaded
-      ? logoMetrics.top - 35 - 16
-      : 0;
+  const horizontalExclusiveTop = logoLoaded ? (logoMetrics.top - 35 - 16) : 0;
   const currentAiPrompt = aiPromptMap[templateKey] ?? "";
   const currentAiLoading = aiLoadingMap[templateKey] ?? false;
 
-  const handleAiEditClick = () => {
+  const handleAiEditClick = async () => {
   if (!bgImage) {
     setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
     return;
@@ -451,17 +499,43 @@ export default function BannerEditorPreviewV2Fix() {
     return;
   }
 
-  setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
-  setStatusMessage("AI 이미지 처리중...");
+  try {
+    setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
+    setStatusMessage("AI 이미지 처리중...");
 
-  setTimeout(() => {
-    // 👉 data:image/png;base64 뒤에 ?v 를 붙이면 이미지가 깨지므로,
-    // 👉 미리보기 단계에서는 별도 tick 값만 올려서 안전하게 리렌더 처리
+    const blob = bgImage.startsWith("data:")
+      ? dataURLToBlob(bgImage)
+      : await fetch(bgImage).then((r) => r.blob());
+    const formData = new FormData();
+    formData.append("image", blob, "background.png");
+    formData.append("prompt", currentAiPrompt.trim());
+
+    const response = await fetch("http://localhost:3001/api/edit-image", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || "AI 편집 요청 실패");
+    }
+
+    if (!data?.image) {
+      throw new Error("편집된 이미지 데이터를 받지 못했어");
+    }
+
+    setBgImage(`data:image/png;base64,${data.image}`);
     setAiPreviewTick((prev) => prev + 1);
-
+    setStatusMessage("AI 편집 완료");
+  } catch (error) {
+    console.error(error);
+    const message = error instanceof Error ? error.message : "AI 편집 중 오류가 발생했어";
+    setStatusMessage(message);
+    alert(message);
+  } finally {
     setAiLoadingMap((prev) => ({ ...prev, [templateKey]: false }));
-    setStatusMessage("AI 편집 완료 (미리보기 단계)");
-  }, 1200);
+  }
 };
 
   return (
@@ -599,26 +673,45 @@ export default function BannerEditorPreviewV2Fix() {
             <h2 style={styles.cardTitle}>미리보기</h2>
           </div>
           <div style={{ padding: 24 }}>
-            <div style={templateKey === "B" ? styles.previewWrapWide : styles.previewWrap}>
+            <div
+              ref={templateKey === "B" ? previewWideHostRef : undefined}
+              style={templateKey === "B" ? styles.previewWrapWide : styles.previewWrap}
+            >
               <div style={styles.previewCenter}>
                 <div
-                  ref={previewCaptureRef}
                   style={{
-                    position: "relative",
+                    width: `${displayPreviewWidth}px`,
+                    height: `${displayPreviewHeight}px`,
                     overflow: "hidden",
-                    borderRadius: 28,
-                    background: "#ffffff",
-                    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
-                    width: `${previewWidth}px`,
-                    height: `${previewHeight}px`,
-                    userSelect: "none",
-                  }}
-                  onPointerEnter={() => setIsPointerInside(true)}
-                  onPointerLeave={() => {
-                    setIsPointerInside(false);
-                    setDragging(false);
+                    flex: "0 0 auto",
                   }}
                 >
+                  <div
+                    style={{
+                      width: `${previewWidth}px`,
+                      height: `${previewHeight}px`,
+                      transform: templateKey === "B" ? `scale(${previewWideScale})` : "none",
+                      transformOrigin: "top left",
+                    }}
+                  >
+                    <div
+                      ref={previewCaptureRef}
+                      style={{
+                        position: "relative",
+                        overflow: "hidden",
+                        borderRadius: 28,
+                        background: "#ffffff",
+                        boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
+                        width: `${previewWidth}px`,
+                        height: `${previewHeight}px`,
+                        userSelect: "none",
+                      }}
+                      onPointerEnter={() => setIsPointerInside(true)}
+                      onPointerLeave={() => {
+                        setIsPointerInside(false);
+                        setDragging(false);
+                      }}
+                    >
                   <div
                     style={{
                       position: "absolute",
@@ -763,28 +856,34 @@ export default function BannerEditorPreviewV2Fix() {
                   )}
 
                   {template.showText && (
-                    <div
-                      style={{
-                        pointerEvents: "none",
-                        position: "absolute",
-                        left: template.textBox.x,
-                        top: template.textBox.y,
-                        width: template.textBox.w,
-                        color: "#ffffff",
-                        fontSize: TEXT_STYLE.fontSize,
-                        lineHeight: `${TEXT_STYLE.lineHeight}px`,
-                        letterSpacing: `${letterSpacing}em`,
-                        fontWeight: TEXT_STYLE.fontWeight,
-                        whiteSpace: "pre-line",
-                        transform: "translate(-2px, -4px)",
-                        fontFamily: 'Arial, "Noto Sans KR", sans-serif',
-                        textShadow: "0 2px 10px rgba(0,0,0,0.4)",
-                        zIndex: 15,
-                      }}
-                    >
-                      {renderText}
-                    </div>
-                  )}
+                 <div
+                    style={{
+                      pointerEvents: "none",
+                      position: "absolute",
+                      left: template.textBox.x,
+                      top: template.textBox.y,
+                      width: template.textBox.w,
+                      color: "#ffffff",
+                      fontSize: TEXT_STYLE.fontSize,
+                      lineHeight: `${TEXT_STYLE.lineHeight}px`,
+                      letterSpacing: `${letterSpacing}em`,
+                      fontWeight: TEXT_STYLE.fontWeight,
+                      whiteSpace: "pre-line",
+
+                      // ✅ 핵심 수정
+                      textAlign: "left",
+
+                      // ✅ 위치 미세 보정 (요청사항)
+                      transform: "translate(-2px, -6px)",
+
+                      fontFamily: '"Noto Sans KR", "Noto Sans CJK KR", sans-serif',
+                      textShadow: "0 2px 10px rgba(0,0,0,0.4)",
+                      zIndex: 15,
+                    }}
+                  >
+                    {text} {/* ⚠️ renderText 말고 원래 text 그대로 */}
+                  </div>
+                )}
 
                   {showExclusiveLabel && templateKey !== "B" && (
                     <img
@@ -836,6 +935,8 @@ export default function BannerEditorPreviewV2Fix() {
     draggable={false}
   />
 )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -879,11 +980,11 @@ export default function BannerEditorPreviewV2Fix() {
                   fontWeight: 800,
                 }}
               >
-                {currentAiLoading ? "준비 중" : "AI 실행"}
+                {currentAiLoading ? "AI 편집 중..." : "AI 실행"}
               </button>
             </div>
               <div style={styles.helper}>
-                지금은 2단계까지 연결된 상태야. 유형별 입력값은 각각 따로 저장되고, 버튼 클릭 시 이미지+자연어 요청 흐름을 점검해.
+                유형별 입력값은 각각 따로 저장돼. AI 실행 버튼을 누르면 로컬 API 서버(3001)로 이미지와 요청 문구를 보내.
               </div>
             </div>
 

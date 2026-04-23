@@ -464,20 +464,9 @@ export default function BannerEditorPreviewV2Fix() {
     });
   }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w]);
 
-  const horizontalLogoRenderedHeight =
-    templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
-      ? (() => {
-          const widthRatio = template.logoBox.w / logoNaturalSize.width;
-          const heightRatio = template.logoBox.h / logoNaturalSize.height;
-          const fitScale = Math.min(widthRatio, heightRatio);
-          const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
-          return Math.min(template.logoBox.h, scaledHeight);
-        })()
-      : 0;
-
   const horizontalExclusiveTop =
-    templateKey === "B" && horizontalLogoRenderedHeight > 0
-      ? template.logoBox.y + template.logoBox.h - horizontalLogoRenderedHeight - 16 - 35
+    templateKey === "B" && logoLoaded
+      ? logoMetrics.top - 35 - 16
       : 0;
 
   const currentShowExclusiveLabel = showExclusiveLabelMap[templateKey] ?? false;
@@ -896,7 +885,7 @@ export default function BannerEditorPreviewV2Fix() {
                     />
                   )}
 
-                  {currentShowExclusiveLabel && templateKey === "B" && logoImage && horizontalLogoRenderedHeight > 0 && (
+                  {currentShowExclusiveLabel && templateKey === "B" && logoImage && logoLoaded && (
                     <img
                       src={HORIZONTAL_EXCLUSIVE_LABEL_SRC}
                       alt=""

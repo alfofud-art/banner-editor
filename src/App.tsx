@@ -453,7 +453,10 @@ export default function BannerEditorPreviewV2Fix() {
   const renderedLogoTop = template.logoBox.y + template.logoBox.h - renderedLogoHeight;
 
   useEffect(() => {
-    if (!previewCaptureRef.current || !logoImgRef.current || !logoLoaded || templateKey !== "B") return;
+  if (!previewCaptureRef.current || !logoImgRef.current || templateKey !== "B") return;
+
+  const measure = () => {
+    if (!previewCaptureRef.current || !logoImgRef.current) return;
 
     const previewRect = previewCaptureRef.current.getBoundingClientRect();
     const logoRect = logoImgRef.current.getBoundingClientRect();
@@ -462,18 +465,30 @@ export default function BannerEditorPreviewV2Fix() {
       top: logoRect.top - previewRect.top,
       height: logoRect.height,
     });
-  }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w]);
+  };
 
-const horizontalLogoRenderedHeight =
-  templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
-    ? (() => {
-        const widthRatio = template.logoBox.w / logoNaturalSize.width;
-        const heightRatio = template.logoBox.h / logoNaturalSize.height;
-        const fitScale = Math.min(widthRatio, heightRatio);
-        const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
-        return scaledHeight;
-      })()
-    : 0;
+  const raf1 = requestAnimationFrame(() => {
+    const raf2 = requestAnimationFrame(measure);
+    (window as any).__bannerRaf2 = raf2;
+  });
+
+  return () => {
+    cancelAnimationFrame(raf1);
+    const raf2 = (window as any).__bannerRaf2;
+    if (raf2) cancelAnimationFrame(raf2);
+  };
+}, [logoLoaded, logoImage, currentLogoScale, templateKey]);
+
+  const horizontalLogoRenderedHeight =
+    templateKey === "B" && logoNaturalSize.width && logoNaturalSize.height
+      ? (() => {
+          const widthRatio = template.logoBox.w / logoNaturalSize.width;
+          const heightRatio = template.logoBox.h / logoNaturalSize.height;
+          const fitScale = Math.min(widthRatio, heightRatio);
+          const scaledHeight = logoNaturalSize.height * fitScale * currentLogoScale;
+          return Math.min(template.logoBox.h, scaledHeight);
+        })()
+      : 0;
 
   const horizontalExclusiveTop =
     templateKey === "B" && horizontalLogoRenderedHeight > 0

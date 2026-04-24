@@ -289,7 +289,7 @@ export default function BannerEditorPreviewV2Fix() {
   const previewCaptureRef = useRef<HTMLDivElement | null>(null);
   const previewWideHostRef = useRef<HTMLDivElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
-  const [showGuide, setShowGuide] = useState({ logo: true, text: true });
+  const [showGuide, setShowGuide] = useState({ logo: true, text: false });
   const [showExclusiveLabel, setShowExclusiveLabel] = useState(true);
   const [showCircleLabel, setShowCircleLabel] = useState(true);
   const [templateKey, setTemplateKey] = useState<keyof typeof TEMPLATE_MAP>("A");

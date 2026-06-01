@@ -69,17 +69,20 @@ const QUALITY_OPTIONS = [
 const styles = {
   page: {
     minHeight: "100vh",
+    width: "100%",
+    overflowX: "hidden",
     background: "#f1f5f9",
     padding: 24,
+    boxSizing: "border-box",
     color: "#0f172a",
     fontFamily: '"Noto Sans KR", "Noto Sans CJK KR", Arial, sans-serif',
     textAlign: "left",
   } as React.CSSProperties,
   layout: {
-    maxWidth: 1280,
+    maxWidth: 1480,
     margin: "0 auto",
     display: "grid",
-    gridTemplateColumns: "380px 1fr",
+    gridTemplateColumns: "380px minmax(0, 896px) 196px",
     gap: 24,
     alignItems: "start",
   } as React.CSSProperties,
@@ -190,17 +193,21 @@ const styles = {
     color: "#475569",
   } as React.CSSProperties,
   previewWrap: {
-    borderRadius: 32,
-    background: "#f8fafc",
-    padding: 32,
+    borderRadius: 0,
+    background: "transparent",
+    padding: "16px 0 8px 0",
+    display: "flex",
+    justifyContent: "center",
   } as React.CSSProperties,
 previewWrapWide: {
-  borderRadius: 32,
-  background: "#f8fafc",
-  padding: 16,
-  overflow: "hidden",
+  borderRadius: 0,
+  background: "transparent",
+  padding: "16px 0 8px 0",
+  overflow: "visible",
   display: "flex",
   justifyContent: "center",
+  width: "100%",
+  boxSizing: "border-box",
 } as React.CSSProperties,
 
 previewCenter: {
@@ -208,7 +215,7 @@ previewCenter: {
   justifyContent: "center",
   alignItems: "flex-start",
   textAlign: "left",
-  width: "auto",
+  width: "100%",
 } as React.CSSProperties,
   toggleGrid: {
     marginTop: 24,
@@ -235,6 +242,41 @@ previewCenter: {
     cursor: "pointer",
     fontSize: 15,
     fontWeight: 800,
+  } as React.CSSProperties,
+  compactSection: {
+    padding: 14,
+    borderRadius: 18,
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    display: "grid",
+    gap: 12,
+  } as React.CSSProperties,
+  miniTitle: {
+    fontSize: 13,
+    fontWeight: 900,
+    color: "#0f172a",
+  } as React.CSSProperties,
+  pillButton: {
+    height: 34,
+    padding: "0 13px",
+    borderRadius: 999,
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#475569",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 900,
+  } as React.CSSProperties,
+  pillButtonActive: {
+    height: 34,
+    padding: "0 13px",
+    borderRadius: 999,
+    border: "1px solid #0f172a",
+    background: "#0f172a",
+    color: "#ffffff",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 900,
   } as React.CSSProperties,
 };
 
@@ -285,132 +327,275 @@ function DataUriIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
+type TemplateKey = keyof typeof TEMPLATE_MAP;
+
+type BannerItem = {
+  id: number;
+  templateKey: TemplateKey;
+  text: string;
+  bgImage: string;
+  logoImage: string;
+  bgScaleMap: Record<TemplateKey, number>;
+  logoScaleMap: Record<TemplateKey, number>;
+  posX: number;
+  posY: number;
+  letterSpacing: number;
+  showExclusiveLabel: boolean;
+  showCircleLabel: boolean;
+  aiPromptMap: Record<TemplateKey, string>;
+  aiLoadingMap: Record<TemplateKey, boolean>;
+  logoNaturalSize: { width: number; height: number };
+  logoLoaded: boolean;
+  logoMetrics: { top: number; height: number };
+  selected: boolean;
+  colorAdjust: { brightness: number; contrast: number; saturation: number };
+};
+
+type LocalManualBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+const createBanner = (id: number, templateKey: TemplateKey = "A"): BannerItem => ({
+  id,
+  templateKey,
+  text: defaultText,
+  bgImage: "",
+  logoImage: "",
+  bgScaleMap: { A: 1, B: 1, C: 1 },
+  logoScaleMap: { A: 1, B: 1, C: 1 },
+  posX: 0,
+  posY: 0,
+  letterSpacing: TEXT_STYLE.letterSpacingEm,
+  showExclusiveLabel: true,
+  showCircleLabel: true,
+  aiPromptMap: { A: "", B: "", C: "" },
+  aiLoadingMap: { A: false, B: false, C: false },
+  logoNaturalSize: { width: 0, height: 0 },
+  logoLoaded: false,
+  logoMetrics: { top: 0, height: 0 },
+  selected: true,
+  colorAdjust: { brightness: 100, contrast: 100, saturation: 100 },
+});
+
 export default function BannerEditorPreviewV2Fix() {
   const previewCaptureRef = useRef<HTMLDivElement | null>(null);
   const previewWideHostRef = useRef<HTMLDivElement | null>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
+  const saveRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [banners, setBanners] = useState<BannerItem[]>([createBanner(1)]);
+  const [activeBannerId, setActiveBannerId] = useState(1);
   const [showGuide, setShowGuide] = useState({ logo: true, text: false });
-  const [showExclusiveLabel, setShowExclusiveLabel] = useState(true);
-  const [showCircleLabel, setShowCircleLabel] = useState(true);
-  const [templateKey, setTemplateKey] = useState<keyof typeof TEMPLATE_MAP>("A");
-  const [text, setText] = useState(defaultText);
-  const [bgScaleMap, setBgScaleMap] = useState({ A: 1, B: 1, C: 1 });
-  const [posX, setPosX] = useState(0);
-  const [posY, setPosY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [isPointerInside, setIsPointerInside] = useState(false);
-  const [bgImage, setBgImage] = useState("");
-  const [logoImage, setLogoImage] = useState("");
-  const [logoScaleMap, setLogoScaleMap] = useState({ A: 1, B: 1, C: 1 });
-  const [logoNaturalSize, setLogoNaturalSize] = useState({ width: 0, height: 0 });
-  const [logoLoaded, setLogoLoaded] = useState(false);
-  const [logoMetrics, setLogoMetrics] = useState({ top: 0, height: 0 });
   const [jpgQuality, setJpgQuality] = useState("0.9");
-  const currentLogoScale = logoScaleMap[templateKey] ?? 1;
-  const currentBgScale = bgScaleMap[templateKey] ?? 1;
+  const [showJpgModal, setShowJpgModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("배경 이미지를 업로드하면 바로 작업 가능");
-  const [letterSpacing, setLetterSpacing] = useState(TEXT_STYLE.letterSpacingEm);
-  const [bExclusiveOffsetY, setBExclusiveOffsetY] = useState(0);
-  const [aiPromptMap, setAiPromptMap] = useState({ A: "", B: "", C: "" });
-  const [aiLoadingMap, setAiLoadingMap] = useState({ A: false, B: false, C: false });
   const [aiPreviewTick, setAiPreviewTick] = useState(0);
   const [previewWideScale, setPreviewWideScale] = useState(1);
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [localTextResults, setLocalTextResults] = useState<string[]>([]);
+  const [manualTextEditOpen, setManualTextEditOpen] = useState(false);
+  const [manualTextBoxes, setManualTextBoxes] = useState<LocalManualBox[]>([]);
+  const [manualBoxHistory, setManualBoxHistory] = useState<LocalManualBox[][]>([]);
+  const [manualTextCurrentBox, setManualTextCurrentBox] = useState<LocalManualBox | null>(null);
+  const [manualTextStartPoint, setManualTextStartPoint] = useState<{ x: number; y: number } | null>(null);
+  const [manualTextDrawing, setManualTextDrawing] = useState(false);
+  const [manualTextScale, setManualTextScale] = useState(1);
   const dragRef = useRef({ x: 0, y: 0, startPosX: 0, startPosY: 0 });
 
+  useEffect(() => {
+    const prevBodyMargin = document.body.style.margin;
+    const prevBodyBackground = document.body.style.background;
+    const prevHtmlBackground = document.documentElement.style.background;
+
+    document.body.style.margin = "0";
+    document.body.style.background = "#f1f5f9";
+    document.documentElement.style.background = "#f1f5f9";
+
+    return () => {
+      document.body.style.margin = prevBodyMargin;
+      document.body.style.background = prevBodyBackground;
+      document.documentElement.style.background = prevHtmlBackground;
+    };
+  }, []);
+
+  const activeBanner = banners.find((banner) => banner.id === activeBannerId) ?? banners[0];
+  const templateKey = activeBanner.templateKey;
   const template = TEMPLATE_MAP[templateKey];
   const previewWidth = template.canvas.width;
   const previewHeight = template.canvas.height;
-  const displayPreviewWidth = templateKey === "B" ? Math.round(previewWidth * previewWideScale) : previewWidth;
-  const displayPreviewHeight = templateKey === "B" ? Math.round(previewHeight * previewWideScale) : previewHeight;
+  const displayPreviewWidth = previewWidth;
+  const displayPreviewHeight = previewHeight;
+  const currentLogoScale = activeBanner.logoScaleMap[templateKey] ?? 1;
+  const currentBgScale = activeBanner.bgScaleMap[templateKey] ?? 1;
+  const currentAiPrompt = activeBanner.aiPromptMap[templateKey] ?? "";
+  const currentAiLoading = activeBanner.aiLoadingMap[templateKey] ?? false;
+  const latestBgImageRef = useRef(activeBanner.bgImage);
 
   useEffect(() => {
-    if (templateKey !== "B") {
-      setPreviewWideScale(1);
-      return;
-    }
+    latestBgImageRef.current = activeBanner.bgImage;
+  }, [activeBanner.bgImage]);
+  const visibleBanners = banners.filter((banner) => banner.templateKey === templateKey);
 
-    const updateScale = () => {
-      const host = previewWideHostRef.current;
-      if (!host) return;
-      const availableWidth = Math.max(0, host.clientWidth - 32);
-      const nextScale = availableWidth > 0 ? Math.min(1, availableWidth / TEMPLATE_MAP.B.canvas.width) : 1;
-      setPreviewWideScale(Number(nextScale.toFixed(4)));
-    };
+  const updateBanner = (id: number, updater: (banner: BannerItem) => BannerItem) => {
+    setBanners((prev) => prev.map((banner) => (banner.id === id ? updater(banner) : banner)));
+  };
 
-    updateScale();
-    window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
+  const updateActiveBanner = (updater: (banner: BannerItem) => BannerItem) => {
+    updateBanner(activeBannerId, updater);
+  };
+
+  const addBanner = () => {
+    const newTemplateKey = templateKey;
+    const nextId = Math.max(...banners.map((banner) => banner.id)) + 1;
+
+    setBanners((prev) => [...prev, createBanner(nextId, newTemplateKey)]);
+    setActiveBannerId(nextId);
+    setStatusMessage(`${TEMPLATE_MAP[newTemplateKey].name} 새 배너를 추가했어`);
+  };
+
+  const removeBanner = (id: number) => {
+    setBanners((prev) => {
+      const target = prev.find((banner) => banner.id === id);
+      if (!target) return prev;
+
+      const sameTypeCount = prev.filter((banner) => banner.templateKey === target.templateKey).length;
+      if (sameTypeCount === 1) return prev;
+
+      const next = prev.filter((banner) => banner.id !== id);
+      if (activeBannerId === id) {
+        const nextSameType = next.find((banner) => banner.templateKey === target.templateKey);
+        if (nextSameType) setActiveBannerId(nextSameType.id);
+      }
+      return next;
+    });
+    setStatusMessage("배너를 삭제했어");
+  };
+
+  useEffect(() => {
+    // 가로포스터(B)는 실제 렌더 기준 832×468을 1:1로 유지한다.
+    // 저장/라벨 계산이 흔들리지 않도록 화면 축소 스케일을 적용하지 않는다.
+    setPreviewWideScale(1);
   }, [templateKey]);
 
   const backgroundStyle = useMemo(
     () => ({
-      transform: `translate(${posX}px, ${posY}px) scale(${currentBgScale})`,
+      transform: `translate(${activeBanner.posX}px, ${activeBanner.posY}px) scale(${currentBgScale})`,
       transformOrigin: "center center" as const,
       touchAction: "none" as const,
       userSelect: "none" as const,
     }),
-    [posX, posY, currentBgScale]
+    [activeBanner.posX, activeBanner.posY, currentBgScale]
   );
 
   const onBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = await readFileAsDataURL(file);
-    setBgImage(url);
-    setBgScaleMap((prev) => ({ ...prev, [templateKey]: 1 }));
-    setPosX(0);
-    setPosY(0);
-    setStatusMessage(`배경 업로드 완료: ${file.name}`);
+    updateActiveBanner((banner) => ({
+      ...banner,
+      bgImage: url,
+      bgScaleMap: { ...banner.bgScaleMap, [banner.templateKey]: 1 },
+      posX: 0,
+      posY: 0,
+    }));
+    setStatusMessage(`A-${activeBanner.id} 배경 업로드 완료: ${file.name}`);
+    e.target.value = "";
   };
 
   const onLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = await readFileAsDataURL(file);
-    // 👉 중요: 기존 로고 사이즈 초기화 (이거 안하면 바로 라벨 뜸)
-    setLogoNaturalSize({ width: 0, height: 0 });
-    setLogoLoaded(false);
-    setLogoMetrics({ top: 0, height: 0 });
-    setLogoScaleMap((prev) => ({ ...prev, [templateKey]: 1 }));
-    setLogoImage(url);
-    setStatusMessage(`로고 업로드 완료: ${file.name}`);
+    updateActiveBanner((banner) => ({
+      ...banner,
+      logoNaturalSize: { width: 0, height: 0 },
+      logoLoaded: false,
+      logoMetrics: { top: 0, height: 0 },
+      logoScaleMap: { ...banner.logoScaleMap, [banner.templateKey]: 1 },
+      logoImage: url,
+    }));
+    setStatusMessage(`A-${activeBanner.id} 로고 업로드 완료: ${file.name}`);
+    e.target.value = "";
   };
 
   const resetView = () => {
-  setBgScaleMap((prev) => ({ ...prev, [templateKey]: 1 }));
-  setPosX(0);
-  setPosY(0);
-  setStatusMessage("이미지 위치를 초기화했어");
-};
+    updateActiveBanner((banner) => ({
+      ...banner,
+      bgScaleMap: { ...banner.bgScaleMap, [banner.templateKey]: 1 },
+      posX: 0,
+      posY: 0,
+    }));
+    setStatusMessage("이미지 위치를 초기화했어");
+  };
 
-  const handleSaveAsJpg = async () => {
-    if (!previewCaptureRef.current) {
-      setStatusMessage("저장할 미리보기를 찾지 못했어");
+  const getRenderedLogoHeight = (banner: BannerItem, targetTemplate = TEMPLATE_MAP[banner.templateKey]) => {
+    if (!banner.logoNaturalSize.width || !banner.logoNaturalSize.height) return targetTemplate.logoBox.h;
+    const widthRatio = targetTemplate.logoBox.w / banner.logoNaturalSize.width;
+    const heightRatio = targetTemplate.logoBox.h / banner.logoNaturalSize.height;
+    const scaleRatio = Math.min(widthRatio, heightRatio);
+    return banner.logoNaturalSize.height * scaleRatio;
+  };
+
+  const getHorizontalExclusiveTop = (banner: BannerItem) => {
+    if (banner.logoLoaded && banner.logoMetrics.height) return banner.logoMetrics.top - 35 - 16;
+    const targetTemplate = TEMPLATE_MAP.B;
+    const renderedLogoHeight = getRenderedLogoHeight(banner, targetTemplate);
+    return targetTemplate.logoBox.y + targetTemplate.logoBox.h - renderedLogoHeight - 35 - 16;
+  };
+
+  useEffect(() => {
+    if (!previewCaptureRef.current || !logoImgRef.current || !activeBanner.logoLoaded || templateKey !== "B") return;
+
+    const previewRect = previewCaptureRef.current.getBoundingClientRect();
+    const logoRect = logoImgRef.current.getBoundingClientRect();
+
+    updateActiveBanner((banner) => ({
+      ...banner,
+      logoMetrics: {
+        top: (logoRect.top - previewRect.top) / previewWideScale,
+        height: logoRect.height / previewWideScale,
+      },
+    }));
+  }, [activeBanner.logoLoaded, activeBanner.logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w, previewWideScale]);
+
+  const handleSaveSelectedAsJpg = async (qualityValue = jpgQuality) => {
+    const selectedBanners = banners.filter((banner) => banner.selected);
+    if (!selectedBanners.length) {
+      setStatusMessage("저장할 배너를 체크해줘");
       return;
     }
 
     try {
       setIsSaving(true);
-      setStatusMessage("JPG 저장 중...");
+      setStatusMessage(`선택한 배너 ${selectedBanners.length}개 JPG 저장 중...`);
+      const quality = Number(qualityValue) || 0.9;
 
-      const canvas = await html2canvas(previewCaptureRef.current, {
-        backgroundColor: "#ffffff",
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        width: template.canvas.width,
-        height: template.canvas.height,
-      });
+      for (const banner of selectedBanners) {
+        const node = saveRefs.current[banner.id];
+        if (!node) continue;
+        const targetTemplate = TEMPLATE_MAP[banner.templateKey];
+        const canvas = await html2canvas(node, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          width: targetTemplate.canvas.width,
+          height: targetTemplate.canvas.height,
+        });
+        const link = document.createElement("a");
+        const fileName = `banner-${targetTemplate.name}-${banner.id}-${Date.now()}.jpg`;
+        link.href = canvas.toDataURL("image/jpeg", quality);
+        link.download = fileName;
+        link.click();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
 
-      const link = document.createElement("a");
-      const quality = Number(jpgQuality) || 0.9;
-      const fileName = `banner-${templateKey}-${Date.now()}.jpg`;
-      link.href = canvas.toDataURL("image/jpeg", quality);
-      link.download = fileName;
-      link.click();
-
-      setStatusMessage(`JPG 저장 완료: ${fileName}`);
+      setStatusMessage(`선택한 배너 ${selectedBanners.length}개 JPG 저장 완료`);
     } catch (error) {
       console.error(error);
       setStatusMessage("JPG 저장 중 오류가 발생했어");
@@ -420,14 +605,14 @@ export default function BannerEditorPreviewV2Fix() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLImageElement>) => {
-    if (!bgImage) return;
+    if (!activeBanner.bgImage) return;
     e.preventDefault();
     setDragging(true);
     dragRef.current = {
       x: e.clientX,
       y: e.clientY,
-      startPosX: posX,
-      startPosY: posY,
+      startPosX: activeBanner.posX,
+      startPosY: activeBanner.posY,
     };
   };
 
@@ -437,8 +622,11 @@ export default function BannerEditorPreviewV2Fix() {
     const onWindowMove = (e: PointerEvent) => {
       const dx = (e.clientX - dragRef.current.x) / 2.2;
       const dy = (e.clientY - dragRef.current.y) / 2.2;
-      setPosX(Number((dragRef.current.startPosX + dx).toFixed(2)));
-      setPosY(Number((dragRef.current.startPosY + dy).toFixed(2)));
+      updateActiveBanner((banner) => ({
+        ...banner,
+        posX: Number((dragRef.current.startPosX + dx).toFixed(2)),
+        posY: Number((dragRef.current.startPosY + dy).toFixed(2)),
+      }));
     };
 
     const onWindowUp = () => setDragging(false);
@@ -450,108 +638,704 @@ export default function BannerEditorPreviewV2Fix() {
       window.removeEventListener("pointermove", onWindowMove);
       window.removeEventListener("pointerup", onWindowUp);
     };
-  }, [dragging]);
+  }, [dragging, activeBannerId]);
 
-  const renderText = text
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("\n");
+  const runGoogleAiEdit = async (promptText: string) => {
+    if (!activeBanner.bgImage) {
+      setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
+      return;
+    }
 
-  const getRenderedLogoHeight = () => {
-    if (!logoNaturalSize.width || !logoNaturalSize.height) return template.logoBox.h;
-    const widthRatio = template.logoBox.w / logoNaturalSize.width;
-    const heightRatio = template.logoBox.h / logoNaturalSize.height;
-    const scaleRatio = Math.min(widthRatio, heightRatio);
-    return logoNaturalSize.height * scaleRatio;
+    if (!promptText.trim()) {
+      setStatusMessage(`${template.name} AI 편집 요청 문구를 입력해줘`);
+      return;
+    }
+
+    try {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: true },
+      }));
+      setStatusMessage("Google AI 이미지 처리중...");
+
+      const blob = activeBanner.bgImage.startsWith("data:")
+        ? dataURLToBlob(activeBanner.bgImage)
+        : await fetch(activeBanner.bgImage).then((r) => r.blob());
+      const formData = new FormData();
+      formData.append("image", blob, "background.png");
+      formData.append("prompt", promptText.trim());
+
+      const response = await fetch("http://localhost:3001/api/edit-image-google", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "AI 편집 요청 실패");
+      }
+
+      if (!data?.image) {
+        throw new Error("편집된 이미지 데이터를 받지 못했어");
+      }
+
+      const nextImage = String(data.image).startsWith("data:")
+        ? String(data.image)
+        : `data:image/png;base64,${data.image}`;
+
+      updateActiveBanner((banner) => ({ ...banner, bgImage: nextImage }));
+      setAiPreviewTick((prev) => prev + 1);
+      setStatusMessage("Google AI 편집 완료");
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : "AI 편집 중 오류가 발생했어";
+      setStatusMessage(message);
+      alert(message);
+    } finally {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: false },
+      }));
+    }
   };
 
-  const renderedLogoHeight = getRenderedLogoHeight();
-  const hasLogoSize = !!logoNaturalSize.height;
-  const renderedLogoTop = template.logoBox.y + template.logoBox.h - renderedLogoHeight;
-
-  useEffect(() => {
-    if (!previewCaptureRef.current || !logoImgRef.current || !logoLoaded || templateKey !== "B") return;
-
-    const previewRect = previewCaptureRef.current.getBoundingClientRect();
-    const logoRect = logoImgRef.current.getBoundingClientRect();
-
-    setLogoMetrics({
-      top: (logoRect.top - previewRect.top) / previewWideScale,
-      height: logoRect.height / previewWideScale,
-    });
-  }, [logoLoaded, logoImage, currentLogoScale, templateKey, template.logoBox.h, template.logoBox.w, previewWideScale]);
-
-  const horizontalExclusiveTop = logoLoaded ? (logoMetrics.top - 35 - 16) : 0;
-  const currentAiPrompt = aiPromptMap[templateKey] ?? "";
-  const currentAiLoading = aiLoadingMap[templateKey] ?? false;
-
   const handleAiEditClick = async () => {
-  if (!bgImage) {
-    setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
-    return;
-  }
+    await runGoogleAiEdit(currentAiPrompt);
+  };
 
-  if (!currentAiPrompt.trim()) {
-    setStatusMessage(`${template.name} AI 편집 요청 문구를 입력해줘`);
-    return;
-  }
+  const runCloudinaryRemoveBg = async () => {
+    if (!activeBanner.bgImage) {
+      setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
+      return;
+    }
 
-  try {
-    setAiLoadingMap((prev) => ({ ...prev, [templateKey]: true }));
-    setStatusMessage("AI 이미지 처리중...");
+    try {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: true },
+      }));
+      setStatusMessage("Cloudinary AI 배경 제거 중...");
 
-    const blob = bgImage.startsWith("data:")
-      ? dataURLToBlob(bgImage)
-      : await fetch(bgImage).then((r) => r.blob());
+      const response = await fetch("/api/remove-bg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: activeBanner.bgImage }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "배경 제거 실패");
+      }
+
+      updateActiveBanner((banner) => ({ ...banner, bgImage: data.url }));
+      setAiPreviewTick((prev) => prev + 1);
+      setStatusMessage("배경 제거 완료!");
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : "배경 제거 중 오류가 발생했어.";
+      setStatusMessage(message);
+      alert(message);
+    } finally {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: false },
+      }));
+    }
+  };
+
+
+  const fetchUrlAsDataUrl = async (url: string) => {
+    const blob = await fetch(url).then((r) => r.blob());
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const requestLocalTextRemove = async (manualBoxes: LocalManualBox[] = [], sourceImage?: string) => {
+    const workingImage = sourceImage || latestBgImageRef.current || activeBanner.bgImage;
+
+    if (!workingImage) {
+      throw new Error(`${template.name} 배경 이미지를 먼저 업로드해줘`);
+    }
+
+    const blob = workingImage.startsWith("data:")
+      ? dataURLToBlob(workingImage)
+      : await fetch(workingImage).then((r) => r.blob());
+
+    const originalManualBoxes = manualBoxes.map((box) => ({
+      x: Math.round(box.x / manualTextScale),
+      y: Math.round(box.y / manualTextScale),
+      width: Math.round(box.width / manualTextScale),
+      height: Math.round(box.height / manualTextScale),
+    }));
+
     const formData = new FormData();
-    formData.append("image", blob, "background.png");
-    formData.append("prompt", currentAiPrompt.trim());
+    formData.append("file", blob, "background.png");
+    formData.append("manual_boxes", JSON.stringify(originalManualBoxes));
 
-    const response = await fetch("http://localhost:3001/api/edit-image", {
+    const response = await fetch("http://localhost:8000/remove-text", {
       method: "POST",
       body: formData,
     });
 
     const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data?.error || "AI 편집 요청 실패");
+    if (!response.ok || !data?.results?.length) {
+      throw new Error(data?.message || "로컬 AI 텍스트 제거 결과를 받지 못했어");
     }
 
-    if (!data?.image) {
-      throw new Error("편집된 이미지 데이터를 받지 못했어");
-    }
+    return await Promise.all(data.results.map((url: string) => fetchUrlAsDataUrl(url)));
+  };
 
-    setBgImage(`data:image/png;base64,${data.image}`);
+  const applyLocalTextResult = (resultDataUrl: string, index?: number) => {
+    latestBgImageRef.current = resultDataUrl;
+
+    updateActiveBanner((banner) => ({
+      ...banner,
+      bgImage: resultDataUrl,
+    }));
     setAiPreviewTick((prev) => prev + 1);
-    setStatusMessage("AI 편집 완료");
-  } catch (error) {
-    console.error(error);
-    const message = error instanceof Error ? error.message : "AI 편집 중 오류가 발생했어";
-    setStatusMessage(message);
-    alert(message);
-  } finally {
-    setAiLoadingMap((prev) => ({ ...prev, [templateKey]: false }));
-  }
-};
+    setManualTextBoxes([]);
+    setManualBoxHistory([]);
+    setManualTextCurrentBox(null);
+    setStatusMessage(index ? `후보 ${index} 적용 완료. 추가 수정이 필요하면 수동 영역을 잡아줘.` : "로컬 AI 결과 적용 완료");
+  };
+
+  const runLocalTextRemove = async () => {
+    if (!activeBanner.bgImage) {
+      setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
+      return;
+    }
+
+    try {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: true },
+      }));
+      setStatusMessage("로컬 AI 텍스트 제거 중... 후보 생성 시간이 조금 걸릴 수 있어.");
+      setLocalTextResults([]);
+
+      const resultDataUrls = await requestLocalTextRemove([]);
+      setLocalTextResults(resultDataUrls);
+      applyLocalTextResult(resultDataUrls[0], 1);
+      setManualTextEditOpen(true);
+      setStatusMessage("로컬 AI 텍스트 제거 완료. 팝업에서 후보를 바꾸거나 수동 영역으로 추가 수정할 수 있어.");
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : "로컬 AI 텍스트 제거 중 오류가 발생했어";
+      setStatusMessage(message);
+      alert(message);
+    } finally {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: false },
+      }));
+    }
+  };
+
+  const runLocalManualTextRemove = async () => {
+    if (!activeBanner.bgImage) {
+      setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
+      return;
+    }
+
+    if (!manualTextBoxes.length) {
+      setStatusMessage("추가로 지울 영역을 먼저 드래그해서 선택해줘");
+      return;
+    }
+
+    try {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: true },
+      }));
+      setStatusMessage("선택한 영역을 생성형으로 추가 복원 중...");
+      setLocalTextResults([]);
+
+      const resultDataUrls = await requestLocalTextRemove(manualTextBoxes);
+      setLocalTextResults(resultDataUrls);
+      applyLocalTextResult(resultDataUrls[0], 1);
+      setManualTextEditOpen(true);
+      setStatusMessage("추가 수정 완료. 팝업에서 후보를 바꾸거나 다시 수동 영역을 잡을 수 있어.");
+    } catch (error) {
+      console.error(error);
+      const message = error instanceof Error ? error.message : "추가 수정 중 오류가 발생했어";
+      setStatusMessage(message);
+      alert(message);
+    } finally {
+      updateActiveBanner((banner) => ({
+        ...banner,
+        aiLoadingMap: { ...banner.aiLoadingMap, [banner.templateKey]: false },
+      }));
+    }
+  };
+
+  const getManualTextPointerPosition = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
+
+  const handleManualTextPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!activeBanner.bgImage || currentAiLoading) return;
+    e.preventDefault();
+    const point = getManualTextPointerPosition(e);
+    setManualTextDrawing(true);
+    setManualTextStartPoint(point);
+    setManualTextCurrentBox({ x: point.x, y: point.y, width: 0, height: 0 });
+  };
+
+  const handleManualTextPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!manualTextDrawing || !manualTextStartPoint) return;
+    const point = getManualTextPointerPosition(e);
+    const x = Math.min(manualTextStartPoint.x, point.x);
+    const y = Math.min(manualTextStartPoint.y, point.y);
+    const width = Math.abs(point.x - manualTextStartPoint.x);
+    const height = Math.abs(point.y - manualTextStartPoint.y);
+    setManualTextCurrentBox({ x, y, width, height });
+  };
+
+  const handleManualTextPointerUp = () => {
+    if (manualTextCurrentBox && manualTextCurrentBox.width > 5 && manualTextCurrentBox.height > 5) {
+      setManualTextBoxes((prev) => {
+        setManualBoxHistory((historyPrev) => {
+          const nextHistory = [...historyPrev, prev];
+          return nextHistory.slice(-10);
+        });
+
+        return [...prev, manualTextCurrentBox];
+      });
+    }
+    setManualTextDrawing(false);
+    setManualTextStartPoint(null);
+    setManualTextCurrentBox(null);
+  };
+
+  const undoManualTextBox = () => {
+    setManualBoxHistory((historyPrev) => {
+      if (historyPrev.length === 0) return historyPrev;
+
+      const previousBoxes = historyPrev[historyPrev.length - 1];
+      setManualTextBoxes(previousBoxes);
+
+      return historyPrev.slice(0, -1);
+    });
+  };
+
+  const clearManualTextBoxes = () => {
+    if (manualTextBoxes.length > 0) {
+      setManualBoxHistory((historyPrev) => {
+        const nextHistory = [...historyPrev, manualTextBoxes];
+        return nextHistory.slice(-10);
+      });
+    }
+
+    setManualTextBoxes([]);
+  };
+
+  const handleAiToolClick = async (toolLabel: string) => {
+    if (toolLabel === "로컬 텍스트 제거") {
+      await runLocalTextRemove();
+      return;
+    }
+
+    if (toolLabel === "배경 제거") {
+      await runCloudinaryRemoveBg();
+      return;
+    }
+
+    const toolPrompts: Record<string, string> = {
+      "객체 삭제": "이미지 안에서 불필요한 글자, 워터마크, 작은 오브젝트, 지저분한 요소를 자연스럽게 삭제하고 주변 배경으로 자연스럽게 복원해줘.",
+      "이미지 확장": "현재 이미지의 분위기와 스타일을 유지하면서 배너에 어울리도록 가장자리 배경을 자연스럽게 확장해줘. 어색한 반복이나 왜곡 없이 자연스럽게 만들어줘.",
+      "화질 개선": "이미지를 더 선명하고 깨끗하게 보정해줘. 노이즈를 줄이고 디테일을 살리되 과하게 변형하지 말고 원본 느낌은 유지해줘.",
+    };
+    await runGoogleAiEdit(toolPrompts[toolLabel] || toolLabel);
+  };
+
+
+  const renderPreview = (banner: BannerItem, options?: { main?: boolean; scaled?: boolean; noSaveRef?: boolean }) => {
+    const isMain = !!options?.main;
+    const isScaled = options?.scaled ?? isMain;
+    const targetTemplateKey = banner.templateKey;
+    const targetTemplate = TEMPLATE_MAP[targetTemplateKey];
+    const targetPreviewWidth = targetTemplate.canvas.width;
+    const targetPreviewHeight = targetTemplate.canvas.height;
+    const targetScale = targetTemplateKey === "B" && isScaled ? previewWideScale : 1;
+    const targetBgScale = banner.bgScaleMap[targetTemplateKey] ?? 1;
+    const targetLogoScale = banner.logoScaleMap[targetTemplateKey] ?? 1;
+    const targetHorizontalExclusiveTop = getHorizontalExclusiveTop(banner);
+
+    return (
+      <div
+        ref={isMain ? previewCaptureRef : options?.noSaveRef ? undefined : (el) => { saveRefs.current[banner.id] = el; }}
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: isMain ? 28 : 0,
+          background: "#ffffff",
+          boxShadow: isMain ? "0 24px 60px rgba(15, 23, 42, 0.18)" : "none",
+          width: `${targetPreviewWidth}px`,
+          height: `${targetPreviewHeight}px`,
+          userSelect: "none",
+        }}
+        onPointerEnter={isMain ? () => setIsPointerInside(true) : undefined}
+        onPointerLeave={isMain ? () => {
+          setIsPointerInside(false);
+          setDragging(false);
+        } : undefined}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#e7e5e4",
+          }}
+        >
+          {banner.bgImage ? (
+            <img
+              key={`${banner.id}-${targetTemplateKey}-${aiPreviewTick}-${banner.bgImage.length}`}
+              src={banner.bgImage}
+              alt="배경"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                filter: `brightness(${banner.colorAdjust?.brightness ?? 100}%) contrast(${banner.colorAdjust?.contrast ?? 100}%) saturate(${banner.colorAdjust?.saturation ?? 100}%)`,
+                cursor: isMain ? (dragging ? "grabbing" : "grab") : "default",
+                transform: `translate(${banner.posX}px, ${banner.posY}px) scale(${targetBgScale})`,
+                transformOrigin: "center center",
+                touchAction: "none",
+                userSelect: "none",
+              }}
+              onPointerDown={isMain ? handlePointerDown : undefined}
+              onDragStart={(e) => e.preventDefault()}
+              draggable={false}
+            />
+          ) : (
+            <div style={{ fontSize: 14, color: "#94a3b8" }}>배경 이미지를 업로드해줘</div>
+          )}
+        </div>
+
+        {targetTemplateKey === "B" ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.4), rgba(0,0,0,0))",
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.2), rgba(0,0,0,0))",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+
+        {isMain && (
+          <div
+            style={{
+              pointerEvents: "none",
+              position: "absolute",
+              left: "50%",
+              top: 12,
+              transform: "translateX(-50%)",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.85)",
+              padding: "6px 16px",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#64748b",
+            }}
+          >
+            {banner.bgImage ? (dragging ? "드래그 중" : isPointerInside ? "이미지를 눌러 드래그" : "배경 드래그로 재단 조정") : "업로드 후 편집 가능"}
+          </div>
+        )}
+
+        {isMain && showGuide.logo && targetTemplate.showLogo && (
+          <img
+            src={LOGO_GUIDE_SRC}
+            alt="로고 가이드"
+            style={{
+              pointerEvents: "none",
+              position: "absolute",
+              left: targetTemplate.logoBox.x,
+              top: targetTemplate.logoBox.y,
+              width: targetTemplate.logoBox.w,
+              height: targetTemplate.logoBox.h,
+              opacity: 0.8,
+              zIndex: 20,
+            }}
+          />
+        )}
+
+        {isMain && showGuide.text && targetTemplate.showText && (
+          <img
+            src={TEXT_GUIDE_SRC}
+            alt="텍스트 가이드"
+            style={{
+              pointerEvents: "none",
+              position: "absolute",
+              left: targetTemplate.textBox.x,
+              top: targetTemplate.textBox.y,
+              width: targetTemplate.textBox.w,
+              height: targetTemplate.textBox.h,
+              opacity: 0.8,
+            }}
+          />
+        )}
+
+        {targetTemplate.showLogo && banner.logoImage && (
+          <div
+            style={{
+              pointerEvents: "none",
+              position: "absolute",
+              left: targetTemplate.logoBox.x,
+              top: targetTemplate.logoBox.y,
+              width: targetTemplate.logoBox.w,
+              height: targetTemplate.logoBox.h,
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "flex-start",
+              overflow: "visible",
+              zIndex: 15,
+            }}
+          >
+            <img
+              ref={isMain ? logoImgRef : undefined}
+              src={banner.logoImage}
+              alt="로고"
+              onLoad={isMain ? (e) => {
+                const img = e.currentTarget;
+                updateActiveBanner((prev) => ({
+                  ...prev,
+                  logoNaturalSize: { width: img.naturalWidth, height: img.naturalHeight },
+                  logoLoaded: true,
+                }));
+              } : undefined}
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                width: "auto",
+                height: "auto",
+                display: "block",
+                objectFit: "contain",
+                transform: `scale(${targetLogoScale})`,
+                transformOrigin: "left bottom",
+                imageRendering: "auto",
+              }}
+            />
+          </div>
+        )}
+
+        {targetTemplate.showText && (
+          <div
+            style={{
+              pointerEvents: "none",
+              position: "absolute",
+              left: targetTemplate.textBox.x,
+              top: targetTemplate.textBox.y,
+              width: targetTemplate.textBox.w,
+              color: "#ffffff",
+              fontSize: TEXT_STYLE.fontSize,
+              lineHeight: `${TEXT_STYLE.lineHeight}px`,
+              letterSpacing: `${banner.letterSpacing}em`,
+              fontWeight: TEXT_STYLE.fontWeight,
+              whiteSpace: "pre-line",
+              textAlign: "left",
+              transform: "translate(-2px, -6px)",
+              fontFamily: '"Noto Sans KR", "Noto Sans CJK KR", sans-serif',
+              textShadow: "0 2px 10px rgba(0,0,0,0.4)",
+              zIndex: 15,
+            }}
+            translate="no"
+            className="notranslate"
+            lang="ko"
+          >
+            {banner.text}
+          </div>
+        )}
+
+        {banner.showExclusiveLabel && targetTemplateKey !== "B" && (
+          <img
+            src={EXCLUSIVE_LABEL_SRC}
+            alt=""
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+              zIndex: 900,
+            }}
+            draggable={false}
+          />
+        )}
+
+        {banner.showExclusiveLabel && targetTemplateKey === "B" && banner.logoImage && (
+          <img
+            src={HORIZONTAL_EXCLUSIVE_LABEL_SRC}
+            alt=""
+            style={{
+              position: "absolute",
+              left: 40,
+              top: targetHorizontalExclusiveTop,
+              pointerEvents: "none",
+              zIndex: 950,
+              width: 229,
+              height: 35,
+            }}
+            draggable={false}
+          />
+        )}
+
+        {banner.showCircleLabel && targetTemplateKey === "A" && (
+          <img
+            src={CIRCLE_LABEL_SRC}
+            alt=""
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+              zIndex: 1000,
+            }}
+            draggable={false}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderThumbnailCard = (banner: BannerItem) => {
+    const isActive = banner.id === activeBannerId;
+    const targetTemplate = TEMPLATE_MAP[banner.templateKey];
+    const isWideThumbnail = banner.templateKey === "B";
+    const thumbWidth = isWideThumbnail ? 168 : 96;
+    const thumbHeight = isWideThumbnail ? 95 : 122;
+    const scale = Math.min(
+      thumbWidth / targetTemplate.canvas.width,
+      thumbHeight / targetTemplate.canvas.height
+    );
+    const renderedThumbWidth = targetTemplate.canvas.width * scale;
+    const renderedThumbHeight = targetTemplate.canvas.height * scale;
+
+    return (
+      <div
+        key={banner.id}
+        onClick={() => setActiveBannerId(banner.id)}
+        style={{
+          borderRadius: 18,
+          border: isActive ? "2px solid #0f172a" : "1px solid #cbd5e1",
+          background: isActive ? "#f8fafc" : "#ffffff",
+          padding: 10,
+          cursor: "pointer",
+          display: "grid",
+          gap: 8,
+          boxShadow: isActive ? "0 10px 24px rgba(15, 23, 42, 0.12)" : "none",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+          <strong style={{ fontSize: 13 }}>{`A-${banner.id}`}</strong>
+          <input
+            type="checkbox"
+            checked={banner.selected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => updateBanner(banner.id, (prev) => ({ ...prev, selected: e.target.checked }))}
+            title="저장 여부"
+          />
+        </div>
+
+        <div
+          style={{
+            width: "100%",
+            height: isWideThumbnail ? 95 : 140,
+            borderRadius: 12,
+            background: "#e7e5e4",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ width: renderedThumbWidth, height: renderedThumbHeight, overflow: "hidden", flex: "0 0 auto", borderRadius: 10 }}>
+            <div
+              style={{
+                width: targetTemplate.canvas.width,
+                height: targetTemplate.canvas.height,
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
+            >
+              {renderPreview(banner, { main: false, scaled: false, noSaveRef: true })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.3 }}>{targetTemplate.name}</div>
+
+        <button
+          type="button"
+          disabled={visibleBanners.length === 1}
+          onClick={(e) => {
+            e.stopPropagation();
+            removeBanner(banner.id);
+          }}
+          style={{
+            height: 28,
+            borderRadius: 10,
+            border: "1px solid #e2e8f0",
+            background: visibleBanners.length === 1 ? "#f8fafc" : "#ffffff",
+            color: visibleBanners.length === 1 ? "#cbd5e1" : "#64748b",
+            cursor: visibleBanners.length === 1 ? "not-allowed" : "pointer",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          삭제
+        </button>
+      </div>
+    );
+  };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.layout}>
+    <div style={styles.page} translate="no" className="notranslate" lang="ko">
+      <style>{`html, body, #root { margin: 0; width: 100%; min-height: 100%; overflow-x: hidden; background: #f1f5f9; }`}</style>
+      <div
+        style={{
+          ...styles.layout,
+          maxWidth: templateKey === "B" ? 1596 : 1480,
+          gridTemplateColumns: templateKey === "B" ? "380px 944px 196px" : "380px minmax(0, 896px) 196px",
+        }}
+      >
         <div style={styles.card}>
           <div style={styles.cardHeader}>
-            <h1 style={styles.cardTitle}>배너 편집기</h1>
-            <p style={styles.cardSub}>원형라벨 성공 시점 기준 안정 버전</p>
+            <h1 style={styles.cardTitle}>배너 제작</h1>
           </div>
           <div style={styles.cardBody}>
             <div style={styles.field}>
               <label style={styles.label}>배너 유형</label>
               <select
                 value={templateKey}
-                onChange={(e) => setTemplateKey(e.target.value as keyof typeof TEMPLATE_MAP)}
+                onChange={(e) => updateActiveBanner((banner) => ({ ...banner, templateKey: e.target.value as TemplateKey }))}
                 style={styles.input}
               >
                 <option value="A">A형</option>
@@ -561,106 +1345,195 @@ export default function BannerEditorPreviewV2Fix() {
               <div style={styles.helper}>{template.description}</div>
             </div>
 
-            <div style={styles.field}>
-              <label style={styles.label}>배경 이미지 업로드</label>
-              <label style={styles.fileLabel}>
-                <DataUriIcon>🖼️</DataUriIcon>
-                PNG / JPG 선택
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={onBgUpload} />
-              </label>
-            </div>
-
-            {template.showLogo && (
-              <div style={styles.field}>
-                <label style={styles.label}>로고 업로드</label>
-                <label style={styles.fileLabel}>
-                  <DataUriIcon>🏷️</DataUriIcon>
-                  로고 PNG 선택
-                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={onLogoUpload} />
+            <div style={styles.compactSection}>
+              <div style={styles.miniTitle}>업로드</div>
+              <div style={{ display: "grid", gridTemplateColumns: template.showLogo ? "1fr 1fr" : "1fr", gap: 10 }}>
+                <label style={{ ...styles.fileLabel, height: 48, justifyContent: "center", padding: "0 10px" }}>
+                  <DataUriIcon children="🖼️" />
+                  배경 이미지
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={onBgUpload} />
                 </label>
-              </div>
-            )}
 
-            {template.showLogo && logoImage && (
-              <div style={styles.field}>
-                <label style={styles.label}>로고 확대: {currentLogoScale.toFixed(2)}x</label>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2.5}
-                  step={0.01}
-                  value={currentLogoScale}
-                  onChange={(e) => setLogoScaleMap((prev) => ({ ...prev, [templateKey]: Number(e.target.value) }))}
-                />
-                <div style={styles.helper}>좌측하단 고정 상태로 로고만 확대/축소</div>
+                {template.showLogo && (
+                  <label style={{ ...styles.fileLabel, height: 48, justifyContent: "center", padding: "0 10px" }}>
+                    <DataUriIcon children="🏷️" />
+                    로고
+                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={onLogoUpload} />
+                  </label>
+                )}
               </div>
-            )}
+            </div>
 
             {template.showText && (
               <div style={styles.field}>
                 <label style={styles.label}>텍스트 입력 (최대 2줄)</label>
-                <textarea value={text} onChange={(e) => setText(e.target.value)} style={styles.textarea} />
+                <textarea
+                  value={activeBanner.text}
+                  onChange={(e) => updateActiveBanner((banner) => ({ ...banner, text: e.target.value }))}
+                  style={styles.textarea}
+                  translate="no"
+                  className="notranslate"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
               </div>
             )}
 
-            <div style={styles.field}>
-              <label style={styles.label}>이미지 확대: {currentBgScale.toFixed(2)}x</label>
-              <input
-                type="range"
-                min={0.8}
-                max={2.2}
-                step={0.01}
-                value={currentBgScale}
-                onChange={(e) => setBgScaleMap((prev) => ({ ...prev, [templateKey]: Number(e.target.value) }))}
-              />
+            <div style={styles.compactSection}>
+              <button
+                type="button"
+                onClick={() => setIsAdjustOpen((prev) => !prev)}
+                style={{
+                  height: 40,
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  cursor: "pointer",
+                  color: "#0f172a",
+                }}
+              >
+                <span style={styles.miniTitle}>이미지 조정</span>
+                <span style={{ fontSize: 13, fontWeight: 900, color: "#64748b" }}>{isAdjustOpen ? "접기 ▲" : "펼치기 ▼"}</span>
+              </button>
+
+              {isAdjustOpen && (
+                <div style={{ display: "grid", gap: 16 }}>
+                  <div style={styles.field}>
+                    <label style={styles.label}>이미지 확대: {currentBgScale.toFixed(2)}x</label>
+                    <input
+                      type="range"
+                      min={0.8}
+                      max={templateKey === "B" ? 3 : 2.2}
+                      step={0.01}
+                      value={currentBgScale}
+                      onChange={(e) => updateActiveBanner((banner) => ({
+                        ...banner,
+                        bgScaleMap: { ...banner.bgScaleMap, [banner.templateKey]: Number(e.target.value) },
+                      }))}
+                    />
+                  </div>
+
+
+                  {template.showLogo && activeBanner.logoImage && (
+                    <div style={styles.field}>
+                      <label style={styles.label}>로고 크기: {Math.round(currentLogoScale * 100)}%</label>
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={2.5}
+                        step={0.01}
+                        value={currentLogoScale}
+                        onChange={(e) => updateActiveBanner((banner) => ({
+                          ...banner,
+                          logoScaleMap: { ...banner.logoScaleMap, [banner.templateKey]: Number(e.target.value) },
+                        }))}
+                      />
+                    </div>
+                  )}
+
+                  <div style={{ height: 1, background: "#e2e8f0" }} />
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>색상 보정</div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: "#64748b" }}>밝기 / 대비 / 채도</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateActiveBanner((banner) => ({
+                        ...banner,
+                        colorAdjust: { brightness: 100, contrast: 100, saturation: 100 },
+                      }))}
+                      style={{
+                        height: 30,
+                        padding: "0 11px",
+                        borderRadius: 999,
+                        border: "1px solid #cbd5e1",
+                        background: "#ffffff",
+                        color: "#0f172a",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 800,
+                      }}
+                    >
+                      초기화
+                    </button>
+                  </div>
+
+                  {[
+                    { key: "brightness", label: "밝기", min: 50, max: 150 },
+                    { key: "contrast", label: "대비", min: 50, max: 150 },
+                    { key: "saturation", label: "채도", min: 0, max: 200 },
+                  ].map((item) => (
+                    <div key={item.key} style={{ display: "grid", gridTemplateColumns: "52px 1fr 44px", alignItems: "center", gap: 10 }}>
+                      <label style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{item.label}</label>
+                      <input
+                        type="range"
+                        min={item.min}
+                        max={item.max}
+                        step={1}
+                        value={activeBanner.colorAdjust?.[item.key as keyof typeof activeBanner.colorAdjust] ?? 100}
+                        onChange={(e) => {
+                          const nextValue = Number(e.target.value);
+                          updateActiveBanner((banner) => ({
+                            ...banner,
+                            colorAdjust: {
+                              brightness: banner.colorAdjust?.brightness ?? 100,
+                              contrast: banner.colorAdjust?.contrast ?? 100,
+                              saturation: banner.colorAdjust?.saturation ?? 100,
+                              [item.key]: nextValue,
+                            },
+                          }));
+                        }}
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#64748b", textAlign: "right" }}>
+                        {activeBanner.colorAdjust?.[item.key as keyof typeof activeBanner.colorAdjust] ?? 100}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {template.showText && (
               <div style={styles.field}>
-                <label style={styles.label}>자간 조절: {letterSpacing.toFixed(3)}em</label>
+                <label style={styles.label}>자간 조절: {activeBanner.letterSpacing.toFixed(3)}em</label>
                 <input
                   type="range"
                   min={-0.08}
                   max={0.05}
                   step={0.001}
-                  value={letterSpacing}
-                  onChange={(e) => setLetterSpacing(Number(e.target.value))}
+                  value={activeBanner.letterSpacing}
+                  onChange={(e) => updateActiveBanner((banner) => ({ ...banner, letterSpacing: Number(e.target.value) }))}
                 />
                 <input
                   type="number"
                   step={0.001}
-                  value={letterSpacing}
-                  onChange={(e) => setLetterSpacing(Number(e.target.value) || 0)}
+                  value={activeBanner.letterSpacing}
+                  onChange={(e) => updateActiveBanner((banner) => ({ ...banner, letterSpacing: Number(e.target.value) || 0 }))}
                   style={styles.input}
                 />
               </div>
             )}
 
-            <div style={styles.field}>
-              <label style={styles.label}>JPG 품질</label>
-              <select value={jpgQuality} onChange={(e) => setJpgQuality(e.target.value)} style={styles.input}>
-                {QUALITY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
 
-            <div style={styles.buttonGrid}>
-              <button type="button" style={styles.button} onClick={() => setShowGuide((prev) => ({ ...prev, logo: !prev.logo }))}>
-                로고 가이드 {showGuide.logo ? "OFF" : "ON"}
-              </button>
-              {templateKey !== "B" && (
-              <button type="button" style={styles.button} onClick={() => setShowGuide((prev) => ({ ...prev, text: !prev.text }))}>
-                텍스트 가이드 {showGuide.text ? "OFF" : "ON"}
-              </button>
-              )}
+            <div
+              style={{
+                paddingTop: 4,
+                display: "grid",
+                gridTemplateColumns: "1fr",
+                gap: 10,
+              }}
+            >
               <button type="button" style={styles.button} onClick={resetView}>
-                초기화
+                이미지 위치 초기화
               </button>
-              <button type="button" style={styles.darkButton} disabled={isSaving} onClick={handleSaveAsJpg}>
-                {isSaving ? "저장 중..." : "JPG 저장"}
+              <button type="button" style={{ ...styles.darkButton, height: 54 }} disabled={isSaving} onClick={() => setShowJpgModal(true)}>
+                {isSaving ? "저장 중..." : "선택 JPG 저장"}
               </button>
             </div>
 
@@ -668,11 +1541,389 @@ export default function BannerEditorPreviewV2Fix() {
           </div>
         </div>
 
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h2 style={styles.cardTitle}>미리보기</h2>
-          </div>
-          <div style={{ padding: 24 }}>
+        <div style={{ width: templateKey === "B" ? 944 : "auto", overflow: "visible" }}>
+          <div style={{ padding: "0 24px 24px 24px" }}>
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 620,
+                margin: "0 auto 22px auto",
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>AI 도구</div>
+              <div
+                style={{
+                  borderRadius: 18,
+                  border: "1px solid #dbe3ec",
+                  background: "rgba(255,255,255,0.72)",
+                  padding: 12,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gap: 10,
+                  boxShadow: "0 10px 28px rgba(15, 23, 42, 0.05)",
+                }}
+              >
+                {[
+                  { label: "배경 제거", icon: "🖼️" },
+                  { label: "객체 삭제", icon: "🧽" },
+                  { label: "이미지 확장", icon: "↗️" },
+                  { label: "화질 개선", icon: "✨" },
+                  { label: "로컬 텍스트 제거", icon: "🪄" },
+                ].map((tool) => (
+                  <button
+                    key={tool.label}
+                    type="button"
+                    disabled={currentAiLoading}
+                    onClick={() => handleAiToolClick(tool.label)}
+                    style={{
+                      height: 44,
+                      borderRadius: 14,
+                      border: "1px solid #cbd5e1",
+                      background: "#ffffff",
+                      color: "#0f172a",
+                      cursor: currentAiLoading ? "default" : "pointer",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 7,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span aria-hidden="true">{tool.icon}</span>
+                    <span>{tool.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {(localTextResults.length > 0 || activeBanner.bgImage) && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    borderRadius: 18,
+                    border: "1px solid #dbe3ec",
+                    background: "#ffffff",
+                    padding: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 3 }}>
+                    <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>로컬 AI 편집</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b" }}>
+                      후보 선택과 수동 추가 수정은 팝업에서 진행
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activeBanner.bgImage) {
+                        setStatusMessage(`${template.name} 배경 이미지를 먼저 업로드해줘`);
+                        return;
+                      }
+                      setManualTextEditOpen(true);
+                    }}
+                    style={{
+                      height: 34,
+                      padding: "0 14px",
+                      borderRadius: 999,
+                      border: "1px solid #0f172a",
+                      background: "#0f172a",
+                      color: "#ffffff",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      fontWeight: 900,
+                    }}
+                  >
+                    팝업으로 추가 수정
+                  </button>
+                </div>
+              )}
+
+              {manualTextEditOpen && activeBanner.bgImage && (
+                <div
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 99999,
+                    background: "rgba(15, 23, 42, 0.62)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 24,
+                  }}
+                  onClick={() => setManualTextEditOpen(false)}
+                >
+                  <div
+                    style={{
+                      width: "min(1180px, 96vw)",
+                      maxHeight: "92vh",
+                      overflow: "auto",
+                      borderRadius: 24,
+                      background: "#ffffff",
+                      boxShadow: "0 30px 90px rgba(15, 23, 42, 0.35)",
+                      padding: 20,
+                      display: "grid",
+                      gap: 16,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 950, color: "#0f172a" }}>로컬 AI 추가 수정</div>
+                        <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: "#64748b" }}>
+                          부족하거나 뭉개진 부분을 이미지 위에서 드래그하고 다시 복원해줘.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setManualTextEditOpen(false)}
+                        style={{
+                          width: 38,
+                          height: 38,
+                          borderRadius: 999,
+                          border: "1px solid #cbd5e1",
+                          background: "#ffffff",
+                          color: "#0f172a",
+                          cursor: "pointer",
+                          fontSize: 18,
+                          fontWeight: 900,
+                        }}
+                        aria-label="닫기"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {localTextResults.length > 0 && (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>생성형 복원 후보</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+                          {localTextResults.map((url, index) => (
+                            <div
+                              key={`${url.slice(0, 32)}-${index}`}
+                              style={{
+                                borderRadius: 16,
+                                border: "1px solid #e2e8f0",
+                                background: "#f8fafc",
+                                padding: 10,
+                                display: "grid",
+                                gap: 8,
+                              }}
+                            >
+                              <img
+                                src={url}
+                                alt={`복원 후보 ${index + 1}`}
+                                style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 12, display: "block" }}
+                              />
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => applyLocalTextResult(url, index + 1)}
+                                  style={{
+                                    flex: 1,
+                                    height: 34,
+                                    borderRadius: 12,
+                                    border: "1px solid #0f172a",
+                                    background: "#0f172a",
+                                    color: "#ffffff",
+                                    cursor: "pointer",
+                                    fontSize: 12,
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  후보 {index + 1} 적용
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    applyLocalTextResult(url, index + 1);
+                                    setManualTextEditOpen(false);
+                                  }}
+                                  style={{
+                                    height: 34,
+                                    padding: "0 10px",
+                                    borderRadius: 12,
+                                    border: "1px solid #cbd5e1",
+                                    background: "#ffffff",
+                                    color: "#334155",
+                                    cursor: "pointer",
+                                    fontSize: 12,
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  적용 후 닫기
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 280px", gap: 16, alignItems: "start" }}>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>수동 영역 선택</div>
+                        <div
+                          onPointerDown={handleManualTextPointerDown}
+                          onPointerMove={handleManualTextPointerMove}
+                          onPointerUp={handleManualTextPointerUp}
+                          onPointerLeave={handleManualTextPointerUp}
+                          style={{
+                            position: "relative",
+                            width: "100%",
+                            maxWidth: 780,
+                            margin: "0 auto",
+                            borderRadius: 18,
+                            overflow: "hidden",
+                            background: "#e2e8f0",
+                            cursor: "crosshair",
+                            userSelect: "none",
+                            border: "1px solid #dbe3ec",
+                          }}
+                        >
+                          <img
+                            src={activeBanner.bgImage}
+                            alt="수동 수정 대상"
+                            draggable={false}
+                            onLoad={(e) => {
+                              const img = e.currentTarget;
+                              if (img.naturalWidth) setManualTextScale(img.clientWidth / img.naturalWidth);
+                            }}
+                            style={{ width: "100%", display: "block" }}
+                          />
+                          {manualTextBoxes.map((box, index) => (
+                            <div
+                              key={`manual-text-${index}`}
+                              style={{
+                                position: "absolute",
+                                left: box.x,
+                                top: box.y,
+                                width: box.width,
+                                height: box.height,
+                                border: "2px solid #2563eb",
+                                background: "rgba(37, 99, 235, 0.16)",
+                                boxSizing: "border-box",
+                                pointerEvents: "none",
+                              }}
+                            />
+                          ))}
+                          {manualTextCurrentBox && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                left: manualTextCurrentBox.x,
+                                top: manualTextCurrentBox.y,
+                                width: manualTextCurrentBox.width,
+                                height: manualTextCurrentBox.height,
+                                border: "2px dashed #2563eb",
+                                background: "rgba(37, 99, 235, 0.10)",
+                                boxSizing: "border-box",
+                                pointerEvents: "none",
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          borderRadius: 18,
+                          border: "1px solid #e2e8f0",
+                          background: "#f8fafc",
+                          padding: 14,
+                          display: "grid",
+                          gap: 10,
+                          position: "sticky",
+                          top: 0,
+                        }}
+                      >
+                        <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>작업</div>
+                        <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
+                          선택 영역 {manualTextBoxes.length}개
+                        </div>
+                        <button
+                          type="button"
+                          onClick={runLocalManualTextRemove}
+                          disabled={currentAiLoading || manualTextBoxes.length === 0}
+                          style={{
+                            height: 40,
+                            borderRadius: 14,
+                            border: "1px solid #2563eb",
+                            background: currentAiLoading || manualTextBoxes.length === 0 ? "#93c5fd" : "#2563eb",
+                            color: "#ffffff",
+                            cursor: currentAiLoading || manualTextBoxes.length === 0 ? "default" : "pointer",
+                            fontSize: 13,
+                            fontWeight: 950,
+                          }}
+                        >
+                          선택 영역 다시 복원
+                        </button>
+                        <button
+                          type="button"
+                          onClick={undoManualTextBox}
+                          disabled={manualBoxHistory.length === 0}
+                          style={{
+                            height: 38,
+                            borderRadius: 14,
+                            border: "1px solid #94a3b8",
+                            background: manualBoxHistory.length === 0 ? "#e2e8f0" : "#f8fafc",
+                            color: manualBoxHistory.length === 0 ? "#94a3b8" : "#0f172a",
+                            cursor: manualBoxHistory.length === 0 ? "default" : "pointer",
+                            fontSize: 13,
+                            fontWeight: 900,
+                          }}
+                          title="마지막으로 추가한 파란 영역만 한 단계 되돌리기"
+                        >
+                          ↶ 이전 단계로
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearManualTextBoxes}
+                          style={{
+                            height: 38,
+                            borderRadius: 14,
+                            border: "1px solid #cbd5e1",
+                            background: "#ffffff",
+                            color: "#334155",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            fontWeight: 900,
+                          }}
+                        >
+                          선택 영역 초기화
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setManualTextEditOpen(false)}
+                          style={{
+                            height: 38,
+                            borderRadius: 14,
+                            border: "1px solid #0f172a",
+                            background: "#ffffff",
+                            color: "#0f172a",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            fontWeight: 900,
+                          }}
+                        >
+                          닫기
+                        </button>
+                        <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.45 }}>
+                          팝업 바깥을 눌러도 닫혀. 결과는 배너 배경에 바로 반영돼.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <div
               ref={templateKey === "B" ? previewWideHostRef : undefined}
               style={templateKey === "B" ? styles.previewWrapWide : styles.previewWrap}
@@ -694,251 +1945,63 @@ export default function BannerEditorPreviewV2Fix() {
                       transformOrigin: "top left",
                     }}
                   >
-                    <div
-                      ref={previewCaptureRef}
-                      style={{
-                        position: "relative",
-                        overflow: "hidden",
-                        borderRadius: 28,
-                        background: "#ffffff",
-                        boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)",
-                        width: `${previewWidth}px`,
-                        height: `${previewHeight}px`,
-                        userSelect: "none",
-                      }}
-                      onPointerEnter={() => setIsPointerInside(true)}
-                      onPointerLeave={() => {
-                        setIsPointerInside(false);
-                        setDragging(false);
-                      }}
-                    >
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "#e7e5e4",
-                    }}
-                  >
-                    {bgImage ? (
-                      <img
-                        key={`${templateKey}-${aiPreviewTick}-${bgImage.length}`}
-                        src={bgImage}
-                        alt="배경"
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                          cursor: dragging ? "grabbing" : "grab",
-                          ...backgroundStyle,
-                        }}
-                        onPointerDown={handlePointerDown}
-                        onDragStart={(e) => e.preventDefault()}
-                        draggable={false}
-                      />
-                    ) : (
-                      <div style={{ fontSize: 14, color: "#94a3b8" }}>배경 이미지를 업로드해줘</div>
-                    )}
-                  </div>
-
-                  {templateKey === "B" ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background: "linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.4), rgba(0,0,0,0))",
-                        pointerEvents: "none",
-                        zIndex: 10,
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.2), rgba(0,0,0,0))",
-                        pointerEvents: "none",
-                      }}
-                    />
-                  )}
-
-                  <div
-                    style={{
-                      pointerEvents: "none",
-                      position: "absolute",
-                      left: "50%",
-                      top: 12,
-                      transform: "translateX(-50%)",
-                      borderRadius: 999,
-                      background: "rgba(255,255,255,0.85)",
-                      padding: "6px 16px",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "#64748b",
-                    }}
-                  >
-                    {bgImage ? (dragging ? "드래그 중" : isPointerInside ? "이미지를 눌러 드래그" : "배경 드래그로 재단 조정") : "업로드 후 편집 가능"}
-                  </div>
-
-                  {showGuide.logo && template.showLogo && (
-                    <img
-                      src={LOGO_GUIDE_SRC}
-                      alt="로고 가이드"
-                      style={{
-                        pointerEvents: "none",
-                        position: "absolute",
-                        left: template.logoBox.x,
-                        top: template.logoBox.y,
-                        width: template.logoBox.w,
-                        height: template.logoBox.h,
-                        opacity: 0.8,
-                        zIndex: 20,
-                      }}
-                    />
-                  )}
-
-                  {showGuide.text && template.showText && (
-                    <img
-                      src={TEXT_GUIDE_SRC}
-                      alt="텍스트 가이드"
-                      style={{
-                        pointerEvents: "none",
-                        position: "absolute",
-                        left: template.textBox.x,
-                        top: template.textBox.y,
-                        width: template.textBox.w,
-                        height: template.textBox.h,
-                        opacity: 0.8,
-                      }}
-                    />
-                  )}
-
-                  {template.showLogo && logoImage && (
-                    <div
-                      style={{
-                        pointerEvents: "none",
-                        position: "absolute",
-                        left: template.logoBox.x,
-                        top: template.logoBox.y,
-                        width: template.logoBox.w,
-                        height: template.logoBox.h,
-                        display: "flex",
-                        alignItems: "flex-end",
-                        justifyContent: "flex-start",
-                        overflow: "hidden",
-                        zIndex: 15,
-                      }}
-                    >
-                      <img
-                        ref={logoImgRef}
-                        src={logoImage}
-                        alt="로고"
-                        onLoad={(e) => {
-                          const img = e.currentTarget;
-                          setLogoNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
-                          requestAnimationFrame(() => {
-                            setLogoLoaded(true);
-                          });
-                        }}
-                        style={{
-                          maxWidth: "100%",
-                          maxHeight: "100%",
-                          display: "block",
-                          objectFit: "contain",
-                          transform: `scale(${currentLogoScale})`,
-                          transformOrigin: "left bottom",
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {template.showText && (
-                 <div
-                    style={{
-                      pointerEvents: "none",
-                      position: "absolute",
-                      left: template.textBox.x,
-                      top: template.textBox.y,
-                      width: template.textBox.w,
-                      color: "#ffffff",
-                      fontSize: TEXT_STYLE.fontSize,
-                      lineHeight: `${TEXT_STYLE.lineHeight}px`,
-                      letterSpacing: `${letterSpacing}em`,
-                      fontWeight: TEXT_STYLE.fontWeight,
-                      whiteSpace: "pre-line",
-
-                      // ✅ 핵심 수정
-                      textAlign: "left",
-
-                      // ✅ 위치 미세 보정 (요청사항)
-                      transform: "translate(-2px, -6px)",
-
-                      fontFamily: '"Noto Sans KR", "Noto Sans CJK KR", sans-serif',
-                      textShadow: "0 2px 10px rgba(0,0,0,0.4)",
-                      zIndex: 15,
-                    }}
-                  >
-                    {text} {/* ⚠️ renderText 말고 원래 text 그대로 */}
-                  </div>
-                )}
-
-                  {showExclusiveLabel && templateKey !== "B" && (
-                    <img
-                      src={EXCLUSIVE_LABEL_SRC}
-                      alt=""
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        pointerEvents: "none",
-                        zIndex: 900,
-                      }}
-                      draggable={false}
-                    />
-                  )}
-
-                  {showExclusiveLabel && templateKey === "B" && logoImage && logoLoaded && (
-                    <img
-                      src={HORIZONTAL_EXCLUSIVE_LABEL_SRC}
-                      alt=""
-                      style={{
-                        position: "absolute",
-                        left: 40,
-                        top: horizontalExclusiveTop,
-                        pointerEvents: "none",
-                        zIndex: 950,
-                        width: 229,
-                        height: 35,
-                      }}
-                      draggable={false}
-                    />
-                  )}
-
-                  {showCircleLabel && templateKey === "A" && (
-  <img
-    src={CIRCLE_LABEL_SRC}
-    alt=""
-    style={{
-      position: "absolute",
-      top: 0,
-      left: 0,
-      width: "100%",
-      height: "100%",
-      pointerEvents: "none",
-      zIndex: 1000,
-    }}
-    draggable={false}
-  />
-)}
-                    </div>
+                    {renderPreview(activeBanner, { main: true, scaled: true })}
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              {template.showLogo && (
+                <button
+                  type="button"
+                  onClick={() => setShowGuide((prev) => ({ ...prev, logo: !prev.logo }))}
+                  style={showGuide.logo ? styles.pillButtonActive : styles.pillButton}
+                >
+                  로고 가이드
+                </button>
+              )}
+              {template.showText && (
+                <button
+                  type="button"
+                  onClick={() => setShowGuide((prev) => ({ ...prev, text: !prev.text }))}
+                  style={showGuide.text ? styles.pillButtonActive : styles.pillButton}
+                >
+                  텍스트 가이드
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => updateActiveBanner((banner) => ({ ...banner, showExclusiveLabel: !banner.showExclusiveLabel }))}
+                style={activeBanner.showExclusiveLabel ? styles.pillButtonActive : styles.pillButton}
+              >
+                독점라벨
+              </button>
+              {templateKey === "A" && (
+                <button
+                  type="button"
+                  onClick={() => updateActiveBanner((banner) => ({ ...banner, showCircleLabel: !banner.showCircleLabel }))}
+                  style={activeBanner.showCircleLabel ? styles.pillButtonActive : styles.pillButton}
+                >
+                  원형라벨
+                </button>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ padding: "6px 12px", borderRadius: 999, color: "#334155", fontSize: 12, fontWeight: 900 }}>
+                {template.name} · {previewWidth}×{previewHeight}
+              </span>
+              <span style={{ color: "#94a3b8", fontSize: 12, fontWeight: 700 }}>배경은 드래그로 위치 조정</span>
             </div>
 
             <div style={{ marginTop: 20, display: "grid", gap: 10 }}>
@@ -946,67 +2009,165 @@ export default function BannerEditorPreviewV2Fix() {
                 {template.name} AI 이미지 편집기
               </div>
               <div style={{ position: "relative" }}>
-              <textarea
-                value={currentAiPrompt}
-                onChange={(e) =>
-                  setAiPromptMap((prev) => ({
-                    ...prev,
-                    [templateKey]: e.target.value,
-                  }))
-                }
-                placeholder="예: 이미지 안의 모든 텍스트를 삭제하고 배경을 자연스럽게 복원해줘"
-                style={{
-                  ...styles.textarea,
-                  minHeight: 90,
-                  paddingRight: 128,
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleAiEditClick}
-                disabled={currentAiLoading}
-                style={{
-                  position: "absolute",
-                  right: 10,
-                  bottom: 10,
-                  height: 32,
-                  padding: "0 12px",
-                  borderRadius: 10,
-                  border: "1px solid #0f172a",
-                  background: currentAiLoading ? "#334155" : "#0f172a",
-                  color: "#ffffff",
-                  cursor: currentAiLoading ? "default" : "pointer",
-                  fontSize: 12,
-                  fontWeight: 800,
-                }}
-              >
-                {currentAiLoading ? "AI 편집 중..." : "AI 실행"}
-              </button>
-            </div>
+                <textarea
+                  value={currentAiPrompt}
+                  onChange={(e) => updateActiveBanner((banner) => ({
+                    ...banner,
+                    aiPromptMap: { ...banner.aiPromptMap, [banner.templateKey]: e.target.value },
+                  }))}
+                  placeholder="예: 이미지 안의 모든 텍스트를 삭제하고 배경을 자연스럽게 복원해줘"
+                  style={{
+                    ...styles.textarea,
+                    minHeight: 90,
+                    paddingRight: 128,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleAiEditClick}
+                  disabled={currentAiLoading}
+                  style={{
+                    position: "absolute",
+                    right: 10,
+                    bottom: 10,
+                    height: 32,
+                    padding: "0 12px",
+                    borderRadius: 10,
+                    border: "1px solid #0f172a",
+                    background: currentAiLoading ? "#334155" : "#0f172a",
+                    color: "#ffffff",
+                    cursor: currentAiLoading ? "default" : "pointer",
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  {currentAiLoading ? "AI 편집 중..." : "AI 실행"}
+                </button>
+              </div>
               <div style={styles.helper}>
-                유형별 입력값은 각각 따로 저장돼. AI 실행 버튼을 누르면 로컬 API 서버(3001)로 이미지와 요청 문구를 보내.
+                배너별 입력값은 각각 따로 저장돼. AI 실행 버튼은 현재 선택된 배너에만 적용돼.
               </div>
             </div>
 
-            <div style={styles.toggleGrid}>
+
+          </div>
+        </div>
+
+        <div style={{ ...styles.card, position: "sticky", top: 24, maxHeight: "calc(100vh - 48px)", overflow: "hidden" }}>
+          <div style={{ padding: "18px 14px 10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 900 }}>배너</div>
+            <button
+              type="button"
+              onClick={addBanner}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 12,
+                border: "1px solid #0f172a",
+                background: "#0f172a",
+                color: "#ffffff",
+                cursor: "pointer",
+                fontSize: 20,
+                fontWeight: 900,
+                lineHeight: 1,
+              }}
+              title="배너 추가"
+            >
+              +
+            </button>
+          </div>
+
+          <div style={{ padding: "0 12px 14px 12px", display: "grid", gap: 12, overflowY: "auto", maxHeight: "calc(100vh - 122px)" }}>
+            {visibleBanners.map((banner) => renderThumbnailCard(banner))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: "fixed",
+          left: -10000,
+          top: 0,
+          width: 1000,
+          height: 1000,
+          overflow: "hidden",
+          pointerEvents: "none",
+          opacity: 0,
+        }}
+      >
+        {banners.map((banner) => (
+          <div key={`save-${banner.id}`} style={{ width: TEMPLATE_MAP[banner.templateKey].canvas.width, height: TEMPLATE_MAP[banner.templateKey].canvas.height }}>
+            {renderPreview(banner, { main: false, scaled: false })}
+          </div>
+        ))}
+      </div>
+
+
+      {showJpgModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              width: 360,
+              background: "#ffffff",
+              borderRadius: 24,
+              boxShadow: "0 24px 70px rgba(15, 23, 42, 0.28)",
+              padding: 24,
+              display: "grid",
+              gap: 18,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>JPG 품질 선택</div>
+              <div style={{ marginTop: 6, fontSize: 13, color: "#64748b" }}>저장할 때만 품질을 선택해.</div>
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <label style={styles.label}>품질</label>
+              <select value={jpgQuality} onChange={(e) => setJpgQuality(e.target.value)} style={styles.input}>
+                {QUALITY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 4 }}>
               <button
                 type="button"
-                style={showExclusiveLabel ? styles.bigButtonActive : styles.bigButton}
-                onClick={() => setShowExclusiveLabel((prev) => !prev)}
+                style={styles.button}
+                onClick={() => setShowJpgModal(false)}
+                disabled={isSaving}
               >
-                독점라벨 ON/OFF
+                취소
               </button>
               <button
                 type="button"
-                style={showCircleLabel ? styles.bigButtonActive : styles.bigButton}
-                onClick={() => setShowCircleLabel((prev) => !prev)}
+                style={styles.darkButton}
+                disabled={isSaving}
+                onClick={async () => {
+                  setShowJpgModal(false);
+                  await handleSaveSelectedAsJpg(jpgQuality);
+                }}
               >
-                원형라벨 ON/OFF
+                {isSaving ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }

@@ -1,95 +1,80 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 import express from "express";
 import cors from "cors";
-import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
-import OpenAI from "openai";
-import { toFile } from "openai/uploads";
 
 dotenv.config();
 
-// 회사망 SSL 검사 우회 테스트용
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
+const PORT = 5001;
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
+    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
   })
 );
 
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "300mb" }));
+app.use(express.urlencoded({ limit: "300mb", extended: true }));
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-app.get("/", (_req, res) => {
-  res.send("서버 정상 실행 중");
+app.get("/", (req, res) => {
+  res.send("Cloudinary 서버 정상 작동 중!");
 });
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+app.get("/api/ping", (req, res) => {
+  res.json({ ok: true, message: "프론트-서버 연결 성공" });
 });
 
-app.post("/api/edit-image", upload.single("image"), async (req, res) => {
-  console.log("POST /api/edit-image 들어옴");
-
+app.post("/api/remove-bg", async (req, res) => {
   try {
-    const prompt = req.body.prompt || "";
-    const file = req.file;
+    const { imageUrl } = req.body;
 
-    if (!file) {
-      return res.status(400).json({ error: "이미지 파일 없음" });
+    if (!imageUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "imageUrl이 없습니다.",
+      });
     }
 
-    if (!prompt.trim()) {
-      return res.status(400).json({ error: "프롬프트 없음" });
+    console.log("이미지 받는 중...");
+
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: ".env의 Cloudinary 값이 비어 있습니다.",
+      });
     }
 
-    console.log("OpenAI 요청 직전");
-
-    const uploadableImage = await toFile(
-      file.buffer,
-      file.originalname || "background.png",
-      {
-        type: file.mimetype || "image/png",
-      }
-    );
-
-    const result = await client.images.edit({
-      model: "gpt-image-1",
-      image: uploadableImage,
-      prompt,
-      size: "1536x1024",
+    const result = await cloudinary.uploader.upload(imageUrl, {
+      background_removal: "cloudinary_ai",
     });
 
-    console.log("OpenAI 응답 받음");
+    console.log("배경 제거 요청 성공:", result.secure_url);
 
-    const outputBase64 = result.data?.[0]?.b64_json;
-
-    if (!outputBase64) {
-      return res.status(500).json({ error: "이미지 결과 없음" });
-    }
-
-    return res.json({
-      image: outputBase64,
+    res.json({
+      success: true,
+      url: result.secure_url,
     });
   } catch (error) {
-    console.error("edit-image error:", error);
+    console.error("❌ Cloudinary 에러:", error);
 
-    return res.status(500).json({
-      error:
-        error?.message ||
-        error?.error?.message ||
-        "AI 이미지 편집 실패",
+    res.status(500).json({
+      success: false,
+      message: error?.message || "Cloudinary 배경 제거 중 오류 발생",
     });
   }
 });
 
-app.listen(3001, () => {
-  console.log("서버 실행됨: http://localhost:3001");
+app.listen(PORT, () => {
+  console.log(`서버가 ${PORT}번에서 아주 잘 돌아가고 있어요!`);
 });

@@ -717,7 +717,7 @@ export default function BannerEditorPreviewV2Fix() {
       }));
       setStatusMessage("Cloudinary AI 배경 제거 중...");
 
-      const response = await fetch("/api/remove-bg", {
+      const response = await fetch("https://banner-editor.onrender.com/api/remove-bg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageUrl: activeBanner.bgImage }),
